@@ -72,7 +72,7 @@ body.studio .bar,body.studio .filters,body.studio .grid,body.studio #empty,body.
 .ph img{position:relative;display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .5s,transform .6s var(--out)}
 .ph.pose img{object-fit:contain;padding:5% 4% 13%;mix-blend-mode:multiply}
 .ph img.ld{opacity:1}.card:hover .ph img.ld{transform:scale(1.02)}
-.ph.err::after{content:"加载失败 · 点击重试";position:absolute;inset:0;display:grid;place-items:center;color:var(--mu);font-size:13px}
+.ph.err::after{content:attr(data-load-error);position:absolute;inset:0;display:grid;place-items:center;color:var(--mu);font-size:13px}
 .badge{position:absolute;left:10px;top:10px;font-size:11.5px;font-weight:600;color:#666;background:rgba(255,255,255,.85);padding:2px 8px;border-radius:99px}
 .cbtns{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:8px;opacity:0;transform:scale(.9);transition:.25s var(--out)}
 .card:hover .cbtns,.cbtns:focus-within,.card.sel .cbtns{opacity:1;transform:none}
@@ -80,8 +80,9 @@ body.studio .bar,body.studio .filters,body.studio .grid,body.studio #empty,body.
 .cbtns button:hover{background:#fff;transform:scale(1.08)}.cbtns button.on{background:#111;color:#fff}.cbtns button[data-a=fav].on{background:#fff;color:var(--ac)}
 .try{position:absolute;left:10px;bottom:10px;background:var(--ac);color:#fff;font-size:13px;padding:8px 14px;opacity:0;transform:translateY(6px);transition:.25s var(--out);box-shadow:0 4px 12px rgba(255,36,66,.3)}
 .try:hover{background:var(--ac2)}.card:hover .try,.try:focus-visible{opacity:1;transform:none}
-.ph.pose .try{bottom:42px}
-.angs{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:2px;padding:8px}
+/* 角度ボタンが複数行になる場合も、試着ボタンと重ならない位置に置きます。 */
+.ph.pose .try{top:42px;bottom:auto}
+.angs{position:absolute;left:0;right:0;bottom:0;display:flex;flex-wrap:wrap;justify-content:center;gap:2px;padding:8px}
 .angs span{font-size:11.5px;padding:3px 9px;color:#888;cursor:pointer;border-radius:99px;background:rgba(255,255,255,.7)}.angs span:hover{color:#111}.angs span.on{color:#fff;background:#111}
 .info{padding:10px 4px 0;min-width:0}
 .info h3{font-size:14.5px;font-weight:600;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -184,7 +185,7 @@ textarea{width:100%;font:13.5px/1.7 var(--sans);color:var(--tx);background:var(-
 .warn{margin-top:10px;font-size:12.5px;color:#b4501f;background:#fff4ea;padding:9px 14px;border-radius:12px}[data-theme=dark] .warn{background:#2a1f16;color:#f0a46a}
 .res{display:flex;gap:8px;margin-top:10px;overflow-x:auto;padding:3px}.res button{padding:0;width:64px;height:84px;flex:none;overflow:hidden;border-radius:12px}.res button.on{box-shadow:0 0 0 2.5px var(--ac)}.res img{width:100%;height:100%;object-fit:cover}
 .out-act{margin-top:12px}.out-act small{color:var(--mu);font-size:12px}#wbDl{background:var(--tx);color:var(--bg)}
-.hist{margin-top:18px;padding:4px 4px 2px}.hist .sh{margin-bottom:10px}.hist .sh b{font-size:14px}.hist .sh small{margin-left:0}.hl{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.hl:empty::before{content:"还没有生成记录";font-size:12.5px;color:var(--mu)}
+.hist{margin-top:18px;padding:4px 4px 2px}.hist .sh{margin-bottom:10px}.hist .sh b{font-size:14px}.hist .sh small{margin-left:0}.hl{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.hl:empty::before{content:attr(data-empty-label);font-size:12.5px;color:var(--mu)}
 .hl button{position:relative;flex:none;padding:0;width:80px;height:104px;overflow:hidden;background:var(--ph);border-radius:12px}.hl img{width:100%;height:100%;object-fit:cover}
 .hl span{position:absolute;left:0;right:0;bottom:0;font-size:10.5px;font-weight:400;background:rgba(0,0,0,.45);color:#fff}.hl i{position:absolute;right:4px;top:4px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-style:normal;font-size:12px;line-height:18px;display:none}.hl button:hover i{display:block}
 .persons{display:flex;gap:8px;flex-wrap:wrap}.persons:empty{display:none}.persons+.drop{margin-top:10px}
@@ -339,7 +340,7 @@ button.empty0::before{content:"";flex:none;width:40px;height:40px;border-radius:
 .adv summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700}.adv summary::-webkit-details-marker{display:none}
 .adv summary::after{content:"";margin-left:auto;width:7px;height:7px;border-right:1.8px solid var(--mu);border-bottom:1.8px solid var(--mu);transform:rotate(45deg) translateY(-2px);transition:transform .2s}.adv[open] summary::after{transform:rotate(-135deg)}
 .adv summary small{font-size:11.5px;color:var(--mu);font-weight:400}.adv-b{margin-top:10px}.adv-b .mt{margin:0 0 4px}.adv-b textarea{font-size:12.5px}#wbPrompt{max-height:180px}
-.st-r .hist .sh{margin-bottom:8px}.st-r .hist .sh small{display:none}.st-r .hl button{width:54px;height:72px;border-radius:10px}.st-r .hl:empty::before{content:"生成后会保存在这里（仅本机）"}
+.st-r .hist .sh{margin-bottom:8px}.st-r .hist .sh small{display:none}.st-r .hl button{width:54px;height:72px;border-radius:10px}.st-r .hl:empty::before{content:attr(data-empty-label)}
 .st-r>.sp{flex:1 1 0;min-height:0}
 .st-r .gobar{position:static;box-shadow:0 8px 30px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.04);background:var(--bg2)}
 .cfgchip{display:none}
@@ -403,7 +404,7 @@ body.batch .card .badge,body.batch .card .angs{display:none}
 .ill .c3{background:#fff;color:#999;font-size:13px;box-shadow:none;border:1.5px dashed #d6d6d6}
 #wbGo::after{display:none!important;animation:none!important}
 @media(max-width:760px){.tbar{flex-wrap:wrap;row-gap:8px}.tbar .sp{flex-basis:100%;height:0}}
-@media(max-width:760px){.angs{flex-wrap:nowrap;overflow:hidden}.angs span{white-space:nowrap;flex:none;padding:3px 7px;font-size:11px}#batchBtn{width:38px;height:34px;justify-content:center;background:var(--sf,#f5f5f5)}#batchBtn svg{width:18px;height:18px}}
+@media(max-width:760px){.angs span{white-space:nowrap;flex:none;padding:3px 7px;font-size:11px}#batchBtn{width:38px;height:34px;justify-content:center;background:var(--sf,#f5f5f5)}#batchBtn svg{width:18px;height:18px}}
 /* ===== v10 ===== */
 :root{--mu:#6e6e6e}[data-theme=dark]{--mu:#9a9a9a}
 #rand{background:#d81b3a}#rand:hover{background:#c0142f}
@@ -493,6 +494,14 @@ button:active:not(:disabled){transform:scale(.97)}.tabs button:active,.chip:acti
 .annbar p{flex:1;margin:0;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:13.5px;color:var(--tx2);line-height:1.6;min-width:0}.annbar p b{font-size:14.5px;color:var(--tx);font-weight:600;white-space:nowrap}
 .annbar .ix{width:32px;height:32px;padding:0;border-radius:50%;background:transparent;color:var(--mu);font-size:12px;flex:none}.annbar .ix:hover{background:var(--line);color:var(--tx)}
 .annbar .sm{flex:none}
+/* モバイルでは案内の文章に幅を確保し、操作を次の行に置く。 */
+@media(max-width:760px){
+ .annbar{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:8px}
+ .annbar p{grid-area:1/1/2/2}
+ .annbar p b{white-space:normal}
+ .annbar .sm{grid-area:2/1/3/2;justify-self:start}
+ .annbar .ix{grid-area:1/2/2/3}
+}
 .noann .annbar,body.studio .annbar,body.depth .annbar,body.compact .annbar{display:none}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.16s!important;animation-timing-function:cubic-bezier(.2,.7,.2,1)}
 .grid{transition:opacity .16s}

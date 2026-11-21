@@ -1,13 +1,15 @@
 'use strict';
 UI.start();
-const tr=UI.t;
 let Q0='',QT='';try{const u=new URLSearchParams(location.search);Q0=(u.get('q')||'').slice(0,60);QT=u.get('t')||''}catch(e){}
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s),LS=k=>{try{return JSON.parse(localStorage[k]||'null')}catch(e){return null}},SV=(k,v)=>{try{localStorage[k]=JSON.stringify(v)}catch(e){}};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// 表示用の翻訳と、検索・保存・プロンプトに使う元データを分ける。
+const tr=(key,params)=>UI.t(key,params), txl=(key,params)=>esc(tr(key,params));
+const htmlLocale=()=>({zh:'zh-CN',en:'en',ja:'ja'})[UI.locale];
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches,HOVER=matchMedia('(hover:hover) and (pointer:fine)').matches;
 const ITEMS={},DATA={},LOAD={},TABS=['pose','depth','costume','anime','portrait','studio','fav','recent'],TNAME={pose:'姿势库',depth:'深度姿势',costume:'服装库',anime:'动画服装库',portrait:'人像库',studio:'试穿',fav:'我的收藏',recent:'最近浏览'};
 const PFX={pose:'p:',depth:'d:',costume:'c:',anime:'a:',portrait:'r:'},KT={p:'pose',d:'depth',c:'costume',a:'anime',r:'portrait'},TL=it=>({pose:'姿势',depth:'深度姿势',costume:'服装',anime:'动画服装',portrait:'人像'})[it.type];
-const st={tab:'pose',q:'',f:{},sort:'def',lang:LS('lang')||'zh',tl:LS('tl')||'zh',fav:new Set(LS('fav')||[]),sel:LS('sel')||[],rec:LS('rec')||[],recT:LS('recT')||{},ang:LS('ang')||{},list:[],n:0,adult:LS('adult')===true};
+const st={tab:'pose',q:'',qAliases:[],f:{},sort:'def',suggestion:'',lang:LS('lang')||'zh',tl:LS('tl')||'zh',fav:new Set(LS('fav')||[]),sel:LS('sel')||[],rec:LS('rec')||[],recT:LS('recT')||{},ang:LS('ang')||{},list:[],n:0,adult:LS('adult')===true};
 const ok=it=>it&&(st.adult||!it.a);
 function load(t){return LOAD[t]||(LOAD[t]=fetch({pose:'poses.json',depth:'depths.json',costume:'costumes.json',anime:'anime.json',portrait:'portraits.json'}[t]).then(r=>{if(!r.ok)throw Error(r.status);return r.json()}).then(raw=>{const a=Array.isArray(raw)?raw:(raw.items||[]);if(t=='depth')DATA.depthMeta=raw.pack||null;a.forEach((it,i)=>{it.type=t;it.k=PFX[t]+it.id;it.ord=i;if(it.angles)it.ai=st.ang[it.k]||0;ITEMS[it.k]=it});DATA[t]=a;if(t=='depth')paintDepth();counts();return a}).catch(e=>{delete LOAD[t];throw e}))}
 const needKeys=ks=>Promise.all([...new Set(ks.map(k=>KT[k[0]]).filter(Boolean))].map(load));
@@ -16,11 +18,11 @@ const thumb=it=>ath(it.angles?it.angles[it.ai].t:it.t),big=it=>it.angles?it.angl
 const orig=it=>it.ext?'':((AH||'/')+(it.angles?it.angles[it.ai].o:it.o));
 function prompt(it,lang){if(it.angles){const a=it.angles[it.ai];return lang=='en'?`${it.en}, ${it.lineEn}, ${a.en}`:`${it.zh}，${it.line}，${a.zh}`}return lang=='en'?it.en:it.zh}
 const title=it=>it.type=='pose'||it.type=='depth'?it.zh:it.ti;
-const subtitle=it=>it.type=='depth'?it.ja:st.lang=='en'?prompt(it,'en'):it.type=='pose'?`${it.cat} · ${it.angles.length} 个角度`:it.type=='portrait'?`${it.sec} · ${it.len}${it.rk?' · 人气第 '+it.rk:''}`:it.zh;
-function paintDepth(){const m=DATA.depthMeta,el=$('#depthNote');if(!m||!el)return;const site=m.site||'https://ai-pose-depth-gallery.pages.dev/',author=m.authorUrl||'https://x.com/giaaibusi';el.innerHTML=`<div class="dnote-in"><p><span class="dtag">${esc(m.unofficial||'非官方汉化')}</span>素材来自 <a href="${esc(site)}" target="_blank" rel="noopener">${esc(m.siteName||'ai-pose-depth-gallery')}</a>，作者<a href="${esc(author)}" target="_blank" rel="noopener">${esc(m.author||'ギア')}</a>（<a href="${esc(author)}" target="_blank" rel="noopener">${esc(author)}</a>）。</p><p class="dsub">${esc(m.note||'')}</p></div>`}
-function toast(t,undo){const e=$('#toast');e.textContent=t;if(undo){const b=document.createElement('button');b.textContent='撤销';b.onclick=()=>{e.classList.remove('on','act');undo()};e.append(b)}e.classList.toggle('act',!!undo);e.classList.remove('on');void e.offsetWidth;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on','act'),undo?4500:1800)}
+const subtitle=it=>it.type=='depth'?it.ja:st.lang=='en'?prompt(it,'en'):it.type=='pose'?`${tr(it.cat)} · ${tr('{count} 个角度',{count:it.angles.length})}`:it.type=='portrait'?`${tr(it.sec)} · ${tr(it.len)}${it.rk?' · '+tr('人气第 {rank}',{rank:it.rk}):''}`:it.zh;
+function paintDepth(){const m=DATA.depthMeta,el=$('#depthNote');if(!m||!el)return;const site=m.site||'https://ai-pose-depth-gallery.pages.dev/',author=m.authorUrl||'https://x.com/giaaibusi';el.innerHTML=`<div class="dnote-in"><p><span class="dtag">${txl(m.unofficial||'非官方汉化')}</span>${tr('素材来自 {site}，作者{author}（{url}）。',{site:`<a href="${esc(site)}" target="_blank" rel="noopener">${esc(m.siteName||'ai-pose-depth-gallery')}</a>`,author:`<a href="${esc(author)}" target="_blank" rel="noopener">${esc(m.author||'ギア')}</a>`,url:`<a href="${esc(author)}" target="_blank" rel="noopener">${esc(author)}</a>`})}</p><p class="dsub">${txl(m.note||'')}</p></div>`}
+function toast(t,undo,params){const e=$('#toast');e._message={t,params};e.textContent=tr(t,typeof params=='function'?params():params);if(undo){const b=document.createElement('button');b.textContent=tr('撤销');b.onclick=()=>{e.classList.remove('on','act');undo()};e.append(b)}e.classList.toggle('act',!!undo);e.classList.remove('on');void e.offsetWidth;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on','act'),undo?4500:1800)}
 const EI={'fav': '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>', 'rec': '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>', 'q': '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>'};
-async function copy(t,label){try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;opacity:0';document.body.append(a);a.select();document.execCommand('copy');a.remove()}toast('已复制'+(label?'「'+label+'」':''))}
+async function copy(t,label,labelParams){try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;opacity:0';document.body.append(a);a.select();document.execCommand('copy');a.remove()}toast(label?'已复制「{label}」':'已复制',null,()=>({label:tr(label||'',labelParams)}))}
 function counts(){if(DATA.pose)$('#nPose').textContent=DATA.pose.filter(ok).length;if(DATA.depth)$('#nDepth').textContent=DATA.depth.filter(ok).length;if(DATA.costume)$('#nCos').textContent=DATA.costume.filter(ok).length;if(DATA.anime)$('#nAni').textContent=DATA.anime.filter(ok).length;if(DATA.portrait)$('#nPor').textContent=DATA.portrait.length;const nf=[...st.fav].filter(k=>!ITEMS[k]||ok(ITEMS[k])).length;$('#nFav').textContent=nf||'';$('#nRec').textContent=st.rec.filter(k=>!ITEMS[k]||ok(ITEMS[k])).length||'';requestAnimationFrame(moveInd)}
 const FDEF={pose:[['line','系列'],['cat','分类'],['ang','角度']],depth:[['line','系列'],['cat','分类'],['ang','角度']],costume:[['cat','分类'],['col','颜色'],['item','单品']],anime:[['cat','分类'],['col','颜色'],['item','单品']],portrait:[['sec','类型'],['len','发长'],['st','发型']],fav:[['type','类型']],recent:[['type','类型']]};
 const FLAB={sec:'类型',len:'发长',st:'发型',line:'系列',cat:'分类',ang:'角度',col:'颜色',item:'单品',type:'类型'};
@@ -32,52 +34,59 @@ function val(it,key){if(key=='ang')return it.angles.map(a=>a.zh);if(key=='type')
  if(key=='col'){if(!it.kw)return[];if(!it._c){const w=' '+it.kw+' ';it._c=Object.keys(COLS).filter(c=>w.includes(' '+COLS[c]+' '))}return it._c}
  if(key=='item'){if(!it.kw)return[];if(!it._i){const e=' '+it.en.replace(/,/g,' ')+' ';it._i=Object.keys(ITEMK).filter(z=>e.includes(' '+ITEMK[z]+' '))}return it._i}return it[key]?[it[key]]:[]}
 function drawFilters(){const b=base();const rows=FDEF[st.tab].map(([key,lab])=>{const c={};b.forEach(it=>val(it,key).forEach(v=>c[v]=(c[v]||0)+1));const ent=Object.entries(c).sort((a,b)=>b[1]-a[1]);if(ent.length<2&&!st.f[key])return'';
- return `<div class="frow" role="group" aria-label="${lab}"><label>${lab}</label><button class="chip ${!st.f[key]?'on':''}" data-k="${key}" data-v="" aria-pressed="${!st.f[key]}">全部</button>${ent.map(([v,n])=>`<button class="chip ${st.f[key]==v?'on':''}" data-k="${key}" data-v="${esc(v)}" aria-pressed="${st.f[key]==v}">${esc(v)}<i>${n}</i></button>`).join('')}</div>`}).join('');
- $('#filters').innerHTML=`<div class="dh"><b>筛选</b><button class="sm pri" data-done>完成</button></div>`+rows;
- const act=Object.entries(st.f).filter(e=>e[1]);$('#active').innerHTML=act.map(([k,v])=>`<button data-k="${k}" title="移除此条件">${FLAB[k]}：${esc(v)} ✕</button>`).join('');$('#fN').textContent=act.length||'';$('#clearAll').hidden=!(act.length||st.q)}
+ return `<div class="frow" role="group" aria-label="${txl(lab)}"><label>${txl(lab)}</label><button class="chip ${!st.f[key]?'on':''}" data-k="${key}" data-v="" aria-pressed="${!st.f[key]}">${txl('全部')}</button>${ent.map(([v,n])=>`<button class="chip ${st.f[key]==v?'on':''}" data-k="${key}" data-v="${esc(v)}" aria-pressed="${st.f[key]==v}">${txl(v)}<i>${n}</i></button>`).join('')}</div>`}).join('');
+ $('#filters').innerHTML=`<div class="dh"><b>${txl('筛选')}</b><button class="sm pri" data-done>${txl('完成')}</button></div>`+rows;
+ const act=Object.entries(st.f).filter(e=>e[1]);$('#active').innerHTML=act.map(([k,v])=>`<button data-k="${k}" title="${txl('移除此条件')}">${txl('{label}：{value}',{label:tr(FLAB[k]),value:tr(v)})} ✕</button>`).join('');$('#fN').textContent=act.length||'';$('#clearAll').hidden=!(act.length||st.q)}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
 function apply(){const q=st.q.toLowerCase().trim().split(/\s+/).filter(Boolean);
- let L=base().filter(it=>Object.entries(st.f).every(([k,v])=>!v||val(it,k).includes(v))&&q.every(w=>(it._s||(it._s=[it.id,it.ti,it.zh,it.en,it.ja,it.kw,it.cat,it.catEn,it.catJa,it.line,it.lineJa,it.no,it.sec,it.len,it.st,...(it.angles||[]).flatMap(a=>[a.zh,a.en,a.ja])].join(' ').toLowerCase())).includes(w)));
+ let L=base().filter(it=>{
+  if(!Object.entries(st.f).every(([k,v])=>!v||val(it,k).includes(v)))return false;
+  if(!q.length)return true;
+  const source=it._s||(it._s=[it.id,it.ti,it.zh,it.en,it.ja,it.kw,it.cat,it.catEn,it.catJa,it.line,it.lineJa,it.no,it.sec,it.len,it.st,...(it.angles||[]).flatMap(a=>[a.zh,a.en,a.ja])].join(' ').toLowerCase());
+  return q.every(w=>source.includes(w))||st.qAliases.some(alias=>source.includes(alias));
+ });
  if(st.f.ang)L.forEach(it=>{const i=it.angles.findIndex(a=>a.zh==st.f.ang);if(i>=0)it.ai=i});
  if(st.sort=='id')L=L.slice().reverse();else if(st.sort=='shuf')L=shuffle(L.slice());else if(st.sort=='rank')L=L.slice().sort((a,b)=>(a.rk||a.rc&&a.rc+10||999)-(b.rk||b.rc&&b.rc+10||999));else if(st.sort=='fav')L=L.slice().sort((a,b)=>st.fav.has(b.k)-st.fav.has(a.k));
- st.list=L;const tot=base().length;const imgs=a=>a.reduce((n,it)=>n+(it.angles?it.angles.length:1),0);
- $('#count').innerHTML=st.tab=='depth'?(L.length==tot?`共 <b>${tot}</b> 组 · ${imgs(base())} 张`:`<b>${L.length}</b> / ${tot} 组 · ${imgs(L)} 张`):(L.length==tot?`共 <b>${tot}</b> 项`:`<b>${L.length}</b> / ${tot} 项`);$('#grid').innerHTML='';st.n=0;
- const em=!L.length;$('#empty').hidden=!em;$('#clearAll').hidden=!(Object.values(st.f).some(Boolean)||st.q);
+ st.list=L;drawCount();$('#grid').innerHTML='';st.n=0;drawEmpty();more()}
+function drawCount(){const L=st.list,tot=base().length,n=`<b>${L.length}</b>`,imgs=L.reduce((sum,it)=>sum+(it.angles?it.angles.length:1),0);
+ // 数字の強調を維持し、語順と単位を翻訳で指定できるようにする。
+ const key=st.tab=='depth'?(L.length==tot?'共 {n} 组 · {imgs} 张':'{n} / {tot} 组 · {imgs} 张'):(L.length==tot?'共 {n} 项':'{n} / {tot} 项');
+ $('#count').innerHTML=tr(key,{n,tot,imgs})}
+function drawEmpty(){const tot=base().length,em=!st.list.length;$('#empty').hidden=!em;$('#clearAll').hidden=!(Object.values(st.f).some(Boolean)||st.q);
  document.body.classList.toggle('none0',(st.tab=='fav'||st.tab=='recent')&&!tot);
- if(em){const none=(st.tab=='fav'||st.tab=='recent')&&!tot;$('#emptyT').textContent=none?(st.tab=='fav'?'还没有收藏':'还没有浏览记录'):'没有找到匹配的内容';
-  $('#emptyP').textContent=none?(st.tab=='fav'?'看到喜欢的，点卡片右上角的 ♡。收藏只存在这台设备的浏览器里，可以导出备份。':'打开过的大图会按时间排在这里，最多保留 100 条。'):'换个关键词试试，或者看看这些热门搜索：';
-  $('#sugg').innerHTML=none?'':(SUGG[st.tab]||[]).map(s=>`<button class="chip" data-s="${s}">${s}</button>`).join('');$('#reset').hidden=none;$('#empty .emo').innerHTML=none?(st.tab=='fav'?EI.fav:EI.rec):EI.q;$('#emptyGo').innerHTML=none?'<button class="sm" data-go="pose">逛姿势库</button><button class="sm" data-go="depth">逛深度姿势</button><button class="sm" data-go="costume">逛服装库</button><button class="sm" data-go="anime">逛动画服装</button><button class="sm" data-go="portrait">逛人像库</button>':''}
- more()}
+ if(em){const none=(st.tab=='fav'||st.tab=='recent')&&!tot;$('#emptyT').textContent=tr(none?(st.tab=='fav'?'还没有收藏':'还没有浏览记录'):'没有找到匹配的内容');
+  $('#emptyP').textContent=tr(none?(st.tab=='fav'?'看到喜欢的，点卡片右上角的 ♡。收藏只存在这台设备的浏览器里，可以导出备份。':'打开过的大图会按时间排在这里，最多保留 100 条。'):'换个关键词试试，或者看看这些热门搜索：');
+  $('#sugg').innerHTML=none?'':(SUGG[st.tab]||[]).map(s=>`<button class="chip" data-s="${esc(s)}">${txl(s)}</button>`).join('');$('#reset').hidden=none;$('#empty .emo').innerHTML=none?(st.tab=='fav'?EI.fav:EI.rec):EI.q;$('#emptyGo').innerHTML=none?Object.entries({pose:'逛姿势库',depth:'逛深度姿势',costume:'逛服装库',anime:'逛动画服装',portrait:'逛人像库'}).map(([tab,label])=>`<button class="sm" data-go="${tab}">${txl(label)}</button>`).join(''):''}}
 function card(it,d){const isS=st.sel.includes(it.k),isF=st.fav.has(it.k),P=it.type=='pose',D=it.type=='depth',t=title(it);
  const tags=P||D?[[it.line,''],[it.cat,'c']]:it.type=='portrait'?[[it.sec,'c'],[it.len,'']]:[[it.cat,'c'],...val(it,'item').slice(0,3).map(x=>[x,''])];
- const miss=D?`<a class="miss" href="${esc(it.site)}" target="_blank" rel="noopener">请前往原站查看</a>`:'';
- return `<article class="card ${isS?'sel':''}" data-k="${it.k}" style="animation-delay:${d||0}ms"><div class="ph ${D?'depth':P?'pose':'cos'}" data-a="open"><img loading="lazy" decoding="async"${D?` referrerpolicy="${esc(it.ref||'no-referrer')}"`:''} src="${esc(thumb(it))}" alt="${esc(t)}" width="${P||D?300:it.type=='portrait'?400:360}" height="${P||D?400:it.type=='portrait'?500:540}" draggable="false">${miss}<button class="phk" data-a="open" aria-label="${esc(t)}"></button>
- ${it.rk?`<span class="badge rk">TOP ${it.rk}</span>`:''}${P||D?`<span class="badge">${esc(it.no)}</span>${it.a?'<span class="badge age">18+</span>':''}<div class="angs">${it.angles.map((a,i)=>`<span data-a="ang" data-i="${i}" class="${i==it.ai?'on':''}">${esc(a.zh)}</span>`).join('')}</div>`:''}
- ${st.tab=='recent'?'<button data-a="unrec" class="unrec" title="从记录中移除" aria-label="从记录中移除">✕</button>':''}<div class="cbtns"><button data-a="fav" class="${isF?'on':''}" title="${isF?'取消收藏':'收藏'}" aria-label="收藏" aria-pressed="${isF}">${isF?'♥':'♡'}</button><button data-a="sel" class="${isS?'on':''}" title="${isS?'移出组合':'加入组合'}" aria-label="加入组合" aria-pressed="${isS}">${isS?'✓':'＋'}</button></div>${D?'':`<button class="try" data-a="try">${P?'用作姿势参考':it.type=='portrait'?'用作人物参考':'试穿这套'}</button>`}</div>
- <div class="info"><h3 title="${esc(t)}">${esc(t)}</h3><div class="sub">${esc(subtitle(it))}</div>${D?`<div class="sub dim">${esc(it.line)} · ${esc(it.cat)}</div>`:''}<div class="tags">${tags.map(([x,c])=>`<span class="tag ${c}">${esc(x)}</span>`).join('')}</div>
- <div class="copy"><button data-a="cpzh">复制中文</button><button data-a="cpen">复制英文</button></div></div></article>`}
+ const miss=D?`<a class="miss" href="${esc(it.site)}" target="_blank" rel="noopener">${txl('请前往原站查看')}</a>`:'';
+ return `<article class="card ${isS?'sel':''}" data-k="${it.k}" style="animation-delay:${d||0}ms"><div class="ph ${D?'depth':P?'pose':'cos'}" data-a="open" data-load-error="${txl('加载失败 · 点击重试')}"><img loading="lazy" decoding="async"${D?` referrerpolicy="${esc(it.ref||'no-referrer')}"`:''} src="${esc(thumb(it))}" alt="${esc(t)}" width="${P||D?300:it.type=='portrait'?400:360}" height="${P||D?400:it.type=='portrait'?500:540}" draggable="false">${miss}<button class="phk" data-a="open" aria-label="${esc(t)}"></button>
+ ${it.rk?`<span class="badge rk">TOP ${it.rk}</span>`:''}${P||D?`<span class="badge">${esc(it.no)}</span>${it.a?'<span class="badge age">18+</span>':''}<div class="angs">${it.angles.map((a,i)=>`<span data-a="ang" data-i="${i}" class="${i==it.ai?'on':''}">${txl(a.zh)}</span>`).join('')}</div>`:''}
+ ${st.tab=='recent'?`<button data-a="unrec" class="unrec" title="${txl('从记录中移除')}" aria-label="${txl('从记录中移除')}">✕</button>`:''}<div class="cbtns"><button data-a="fav" class="${isF?'on':''}" title="${txl(isF?'取消收藏':'收藏')}" aria-label="${txl(isF?'取消收藏':'收藏')}" aria-pressed="${isF}">${isF?'♥':'♡'}</button><button data-a="sel" class="${isS?'on':''}" title="${txl(isS?'移出组合':'加入组合')}" aria-label="${txl(isS?'移出组合':'加入组合')}" aria-pressed="${isS}">${isS?'✓':'＋'}</button></div>${D?'':`<button class="try" data-a="try">${txl(P?'用作姿势参考':it.type=='portrait'?'用作人物参考':'试穿这套')}</button>`}</div>
+ <div class="info"><h3 title="${esc(t)}">${esc(t)}</h3><div class="sub">${esc(subtitle(it))}</div>${D?`<div class="sub dim">${txl(it.line)} · ${txl(it.cat)}</div>`:''}<div class="tags">${tags.map(([x,c])=>`<span class="tag ${c}">${txl(x)}</span>`).join('')}</div>
+ <div class="copy"><button data-a="cpzh">${txl('复制中文')}</button><button data-a="cpen">${txl('复制英文')}</button></div></div></article>`}
 function grp(k){const t=st.recT[k];if(!t)return'更早';const d=new Date();d.setHours(0,0,0,0);return t>=d?'今天':t>=d-864e5?'昨天':t>=d-6*864e5?'近 7 天':'更早'}
-function more(){if(st.n>=st.list.length)return;const G=st.tab=='recent'&&!st.q&&!Object.values(st.f).some(Boolean);let pg=G&&st.n?grp(st.list[st.n-1].k):'';const h=st.list.slice(st.n,st.n+30).map((it,i)=>{let x='';if(G){const g=grp(it.k);if(g!=pg){x=`<h4 class="grp">${g}</h4>`;pg=g}}return x+card(it,RM?0:Math.min(i,14)*35)}).join('');st.n+=30;$('#grid').insertAdjacentHTML('beforeend',h)}
+function more(){if(st.n>=st.list.length)return;const G=st.tab=='recent'&&!st.q&&!Object.values(st.f).some(Boolean);let pg=G&&st.n?grp(st.list[st.n-1].k):'';const h=st.list.slice(st.n,st.n+30).map((it,i)=>{let x='';if(G){const g=grp(it.k);if(g!=pg){x=`<h4 class="grp" data-group="${g}">${txl(g)}</h4>`;pg=g}}return x+card(it,RM?0:Math.min(i,14)*35)}).join('');st.n+=30;$('#grid').insertAdjacentHTML('beforeend',h)}
 const grid=$('#grid');
 grid.addEventListener('load',e=>{if(e.target.tagName=='IMG'){e.target.classList.add('ld');e.target.parentNode.classList.add('done')}},true);
 grid.addEventListener('error',e=>{if(e.target.tagName=='IMG'){e.target.parentNode.classList.add('err','done')}},true);
 new IntersectionObserver(e=>e[0].isIntersecting&&more(),{rootMargin:'1400px'}).observe($('#sentinel'));
 function refreshCard(k){const el=grid.querySelector(`.card[data-k="${CSS.escape(k)}"]`);if(!el)return;const t=document.createElement('div');t.innerHTML=card(ITEMS[k]);const n=t.firstElementChild;n.style.animation='none';n.querySelector('img').classList.add('ld');n.querySelector('.ph').classList.add('done');el.replaceWith(n)}
 function setAng(it,i){it.ai=i;st.ang[it.k]=i;SV('ang',st.ang);refreshCard(it.k)}
-function dropCard(k){const el=grid.querySelector(`.card[data-k="${CSS.escape(k)}"]`);const i=st.list.findIndex(x=>x.k==k);if(i>=0){st.list.splice(i,1);st.n=Math.max(0,st.n-1)}const fin=()=>{el&&el.remove();if(!st.list.length)apply();else{const tot=base().length;$('#count').innerHTML=st.list.length==tot?`共 <b>${tot}</b> 项`:`<b>${st.list.length}</b> / ${tot} 项`;grid.querySelectorAll('.rgrp').forEach(g=>{const n=g.nextElementSibling;if(!n||n.classList.contains('rgrp'))g.remove()})}};if(el&&!RM)el.animate([{opacity:1,transform:'none'},{opacity:0,transform:'scale(.92)'}],{duration:220,easing:'cubic-bezier(.4,0,.2,1)'}).finished.then(fin);else fin()}
+function dropCard(k){const el=grid.querySelector(`.card[data-k="${CSS.escape(k)}"]`);const i=st.list.findIndex(x=>x.k==k);if(i>=0){st.list.splice(i,1);st.n=Math.max(0,st.n-1)}const fin=()=>{el&&el.remove();if(!st.list.length)apply();else{drawCount();grid.querySelectorAll('.rgrp').forEach(g=>{const n=g.nextElementSibling;if(!n||n.classList.contains('rgrp'))g.remove()})}};if(el&&!RM)el.animate([{opacity:1,transform:'none'},{opacity:0,transform:'scale(.92)'}],{duration:220,easing:'cubic-bezier(.4,0,.2,1)'}).finished.then(fin);else fin()}
 function toggleFav(k,quiet){const on=!st.fav.has(k);on?st.fav.add(k):st.fav.delete(k);SV('fav',[...st.fav]);counts();if(!quiet)toast(on?'已加入收藏':'已取消收藏',on?null:()=>{toggleFav(k,1);if(st.tab=='fav')apply()});if(!on&&st.tab=='fav'&&$('#lb').hidden)dropCard(k);else{refreshCard(k);if(st.tab=='fav')pend.add(k)}if(!$('#lb').hidden)lbDraw()}
 function unRec(k){const old=st.rec.slice();st.rec=st.rec.filter(x=>x!=k);SV('rec',st.rec);counts();dropCard(k);toast('已从记录中移除',()=>{st.rec=old;SV('rec',old);counts();apply()})}
 function toggleSel(k){const i=st.sel.indexOf(k);i>=0?st.sel.splice(i,1):st.sel.push(k);SV('sel',st.sel);refreshCard(k);tray(i<0);toast(i<0?'已加入组合':'已移出组合');if(!$('#lb').hidden)lbDraw()}
 function combo(lang){const its=st.sel.map(k=>ITEMS[k]).filter(Boolean),p=its.filter(i=>i.type=='pose'),d=its.filter(i=>i.type=='depth'),c=its.filter(i=>i.type=='costume'||i.type=='anime'),r=its.filter(i=>i.type=='portrait');
  if(lang=='en')return['masterpiece, best quality, 1girl',...r.map(i=>i.en.replace(/, consistent facial features, face reference$/,'')),...c.map(i=>i.en.replace(/^\w+ outfit, /,'')),...p.map(i=>prompt(i,'en')),...d.map(i=>'depth reference, '+prompt(i,'en'))].join(', ');
  return['杰作，最佳画质，一位女性',...r.map(i=>'人物：'+i.len+(i.st?'，'+i.st:'')),...c.map(i=>i.zh.replace(/。$/,'')),...p.map(i=>'摆出「'+prompt(i,'zh')+'」的姿势'),...d.map(i=>'深度姿势参考：'+prompt(i,'zh'))].join('；')+'。'}
-function tray(added){const n=st.sel.length;if(st.tab=='studio'){$('#tray').hidden=true;document.body.classList.remove('tray');return}$('#tray').hidden=!n;document.body.classList.toggle('tray',n>0);if(!n)return;if(added&&innerWidth>760)$('#tray').classList.remove('min');if(added&&innerWidth<=760&&n==1){$('#tray').classList.add('min');$('#trayMin').textContent='展开'}
- const p=st.sel.filter(k=>k[0]=='p').length,dd=st.sel.filter(k=>k[0]=='d').length,rr=st.sel.filter(k=>k[0]=='r').length;$('#trayN').textContent=[p&&`${p} 个姿势`,dd&&`${dd} 个深度姿势`,n-p-dd-rr&&`${n-p-dd-rr} 套服装`,rr&&`${rr} 个人像`].filter(Boolean).join(' · ');
+function tray(added){const n=st.sel.length;if(st.tab=='studio'){$('#tray').hidden=true;document.body.classList.remove('tray');return}$('#tray').hidden=!n;document.body.classList.toggle('tray',n>0);if(!n)return;if(added&&innerWidth>760)$('#tray').classList.remove('min');if(added&&innerWidth<=760&&n==1)$('#tray').classList.add('min');$('#trayMin').textContent=tr($('#tray').classList.contains('min')?'展开':'收起');
+ const p=st.sel.filter(k=>k[0]=='p').length,dd=st.sel.filter(k=>k[0]=='d').length,rr=st.sel.filter(k=>k[0]=='r').length;$('#trayN').textContent=[p&&tr('{count} 个姿势',{count:p}),dd&&tr('{count} 个深度姿势',{count:dd}),n-p-dd-rr&&tr('{count} 套服装',{count:n-p-dd-rr}),rr&&tr('{count} 个人像',{count:rr})].filter(Boolean).join(' · ');
  $$('[data-tl]').forEach(b=>b.classList.toggle('on',b.dataset.tl==st.tl));
- $('#trayItems').innerHTML=st.sel.map(k=>ITEMS[k]?`<div><img src="${esc(thumb(ITEMS[k]))}"${ITEMS[k].ref?` referrerpolicy="${esc(ITEMS[k].ref)}"`:''} alt="${esc(title(ITEMS[k]))}"><em>${TL(ITEMS[k])}</em><b data-k="${k}" title="移除" role="button" aria-label="移除">×</b></div>`:'').join('');$('#trayText').textContent=combo(st.tl)}
+ $('#trayItems').innerHTML=st.sel.map(k=>ITEMS[k]?`<div><img src="${esc(thumb(ITEMS[k]))}"${ITEMS[k].ref?` referrerpolicy="${esc(ITEMS[k].ref)}"`:''} alt="${esc(title(ITEMS[k]))}"><em>${txl(TL(ITEMS[k]))}</em><b data-k="${k}" title="${txl('移除')}" role="button" aria-label="${txl('移除')}">×</b></div>`:'').join('');$('#trayText').lang=st.tl=='zh'?'zh-CN':'en';$('#trayText').textContent=combo(st.tl)}
 $('#trayItems').onclick=e=>{const k=e.target.dataset.k;k&&toggleSel(k)};$('#trayCopyEn').onclick=()=>copy(combo('en'),'组合英文提示词');$('#trayCopyZh').onclick=()=>copy(combo('zh'),'组合中文描述');
 $$('[data-tl]').forEach(b=>b.onclick=()=>{st.tl=b.dataset.tl;SV('tl',st.tl);tray()});
-$('#trayMin').onclick=()=>{const m=$('#tray').classList.toggle('min');$('#trayMin').textContent=m?'展开':'收起'};
+$('#trayMin').onclick=()=>{const m=$('#tray').classList.toggle('min');$('#trayMin').textContent=tr(m?'展开':'收起')};
 $('#trayClear').onclick=()=>{const s=st.sel;st.sel=[];SV('sel',[]);s.forEach(refreshCard);tray();toast('已清空组合')};
 grid.onclick=e=>{if(e.target.closest('a.miss'))return;const a=e.target.closest('[data-a]');if(!a)return;const c=e.target.closest('.card'),k=c.dataset.k,it=ITEMS[k];e.stopPropagation();
  const ph=c.querySelector('.ph');if(a.dataset.a=='open'&&ph.classList.contains('err')){const im=ph.querySelector('img');ph.classList.remove('err','done');im.src=thumb(it)+'?r='+Date.now();return}
@@ -87,10 +96,26 @@ function drawer(o){$('#filters').classList.toggle('open',o);$('#fBtn').classList
 $('#fBtn').onclick=()=>drawer(!$('#filters').classList.contains('open'));$('#drawerBg').onclick=()=>drawer(false);
 $('#filters').onclick=e=>{if(e.target.closest('[data-done]'))return drawer(false);const b=e.target.closest('.chip');if(!b)return;st.f[b.dataset.k]=b.dataset.v;viewT(()=>{drawFilters();apply()})};
 $('#active').onclick=e=>{const b=e.target.closest('button');if(b){st.f[b.dataset.k]='';viewT(()=>{drawFilters();apply()})}};
-const clearAll=()=>{st.f={};st.q='';$('#q').value='';$('#qx').hidden=true;viewT(()=>{drawFilters();apply()})};$('#reset').onclick=clearAll;$('#clearAll').onclick=clearAll;
-$('#sugg').onclick=e=>{const s=e.target.closest('[data-s]');if(s){st.f={};$('#q').value=st.q=s.dataset.s;$('#qx').hidden=false;drawFilters();apply()}};
+const clearAll=()=>{clearTimeout(qt);st.f={};st.q='';st.qAliases=[];$('#q').value='';st.suggestion='';$('#qx').hidden=true;viewT(()=>{drawFilters();apply()})};$('#reset').onclick=clearAll;$('#clearAll').onclick=clearAll;
+// 候補を選んだときは表示だけを翻訳し、従来の語で検索する。
+function searchSuggestion(value){
+ clearTimeout(qt);st.qAliases=[];st.q=st.suggestion=value;$('#q').value=tr(value);$('#qx').hidden=false;apply();
+}
+$('#sugg').onclick=e=>{const s=e.target.closest('[data-s]');if(s){st.f={};searchSuggestion(s.dataset.s);drawFilters()}};
 $('#sort').onchange=e=>{st.sort=e.target.value;viewT(apply)};
-let qt;$('#q').oninput=e=>{$('#qx').hidden=!e.target.value;clearTimeout(qt);qt=setTimeout(()=>{st.q=e.target.value;apply()},160)};$('#qx').onclick=()=>{$('#q').value='';st.q='';$('#qx').hidden=true;apply();$('#q').focus()};
+// 翻訳された候補・絞り込み名を直接入力した場合も、元のキーワードで探せるようにする。
+function searchAliases(value){
+ const normalized=value.trim().toLowerCase();
+ if(UI.locale=='zh'||!normalized)return [];
+ const filterValues=Array.from($$('#filters [data-v]'),button=>button.dataset.v);
+ const options=new Set([...(SUGG[st.tab]||[]),...Object.keys(COLS),...Object.keys(ITEMK),...filterValues]);
+ return [...options].filter(raw=>raw&&raw!==normalized&&tr(raw).toLowerCase()===normalized);
+}
+let qt;$('#q').oninput=e=>{
+ const value=e.target.value,aliases=searchAliases(value);
+ st.suggestion='';$('#qx').hidden=!value;clearTimeout(qt);
+ qt=setTimeout(()=>{st.q=value;st.qAliases=aliases;apply()},160);
+};$('#qx').onclick=()=>{clearTimeout(qt);$('#q').value='';st.suggestion='';st.q='';st.qAliases=[];$('#qx').hidden=true;apply();$('#q').focus()};
 function randPick(){if(!st.list.length)return toast('当前没有可选的内容');const i=Math.random()*st.list.length|0;lbOpen(i);0}
 $('#rand').onclick=randPick;
 // 语言
@@ -101,21 +126,22 @@ function drawHeader(){
  if(st.tab)document.title=tr('{tab} · 衣姿 PoseWear',{tab:tr(TNAME[st.tab])});
  $('#q').placeholder=tr(st.tab=='depth'?'搜姿势名、系列、分类':innerWidth<=760?'搜索':'搜姿势、颜色、单品');
 }
+function drawLoadError(t){$('#empty').hidden=false;$('#emptyT').textContent=tr('数据加载失败');$('#emptyP').textContent=tr('请检查网络后刷新页面重试');$('#sugg').innerHTML='';$('#reset').hidden=true;$('#empty .emo').innerHTML=EI.q;$('#emptyGo').innerHTML=`<button class="sm pri" id="retry">${txl('重新加载')}</button>`;$('#retry').onclick=()=>{st.tab='';setTab(t)}}
 // 标签页
 function moveInd(){const b=$('.tabs button.on'),ind=$('.ind');if(!b)return;ind.style.width=b.offsetWidth+'px';ind.style.transform=`translateX(${b.offsetLeft}px)`}
 async function setTab(t,openId){$('#porNote').hidden=t!='portrait';$('#depthNote').hidden=t!='depth';document.body.classList.toggle('depth',t=='depth');if(t=='studio'){st.tab=t;$$('.tabs button').forEach(b=>{b.classList.toggle('on',b.dataset.tab==t);b.setAttribute('aria-selected',b.dataset.tab==t)});moveInd();drawHeader();history.replaceState(null,'','#studio');document.body.classList.add('studio');$('#studio').hidden=false;$('#tray').hidden=true;scrollTo({top:0});window.WB&&WB.show();return}
  if(document.body.classList.contains('studio')){document.body.classList.remove('studio');$('#studio').hidden=true;tray()}
- const changed=st.tab!=t;st.tab=t;if(changed)grid.classList.add('gbusy');st.f={};st.q='';$('#q').value='';$('#qx').hidden=true;
+ const changed=st.tab!=t;st.tab=t;if(changed)grid.classList.add('gbusy');clearTimeout(qt);st.f={};st.q='';st.qAliases=[];$('#q').value='';st.suggestion='';$('#qx').hidden=true;
  $$('.tabs button').forEach(b=>{b.classList.toggle('on',b.dataset.tab==t);b.setAttribute('aria-selected',b.dataset.tab==t)});moveInd();
  drawHeader();if(!openId)history.replaceState(null,'','#'+t);
  $('#rand').hidden=t=='fav'||t=='recent';$('#favTools').hidden=t!='fav';$('#clrRec').hidden=t!='recent';$('#sort').hidden=t=='recent';$('#porNote').hidden=t!='portrait';$('#depthNote').hidden=t!='depth';$('#sort option[value=rank]').hidden=t!='portrait';if(t!='portrait'&&st.sort=='rank'){st.sort='def';$('#sort').value='def'}
  document.body.classList.toggle('compact',t=='fav'||t=='recent');
  if((!DATA[t]&&!(t=='pose'&&grid.querySelector('.ssr')))||t=='fav'||t=='recent'){grid.innerHTML='<div class="skel"></div>'.repeat(10);$('#empty').hidden=true}
- try{if(t=='fav')await needKeys([...st.fav]);else if(t=='recent')await needKeys(st.rec);else await load(t)}catch(e){grid.innerHTML='';$('#empty').hidden=false;$('#emptyT').textContent='数据加载失败';$('#emptyP').textContent='请检查网络后刷新页面重试';$('#sugg').innerHTML='';$('#reset').hidden=true;$('#empty .emo').innerHTML=EI.q;delete LOAD[t];grid.classList.remove('gbusy');$('#emptyGo').innerHTML='<button class="sm pri" id="retry">重新加载</button>';$('#retry').onclick=()=>{st.tab='';setTab(t)};return}
- if(st.tab!=t)return;if(Q0){st.q=Q0;$('#q').value=Q0;$('#qx').hidden=false;Q0=''}const go=()=>{drawFilters();apply()};if(changed)await viewT(go);else go();grid.classList.remove('gbusy');
+ try{if(t=='fav')await needKeys([...st.fav]);else if(t=='recent')await needKeys(st.rec);else await load(t)}catch(e){grid.innerHTML='';delete LOAD[t];grid.classList.remove('gbusy');drawLoadError(t);return}
+ if(st.tab!=t)return;if(Q0){st.q=Q0;st.qAliases=searchAliases(Q0);$('#q').value=Q0;$('#qx').hidden=false;Q0=''}const go=()=>{drawFilters();apply()};if(changed)await viewT(go);else go();grid.classList.remove('gbusy');
  if(openId)openById(openId)
  else if(changed&&scrollY>$('#bar').offsetTop)scrollTo({top:$('#hero').offsetHeight&&t!='fav'&&t!='recent'?$('#bar').offsetTop-60:0})}
-$('.tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;const t=b.dataset.tab;if(t==st.tab&&!document.body.classList.contains('studio')){scrollTo({top:0,behavior:RM?'auto':'smooth'});return}if(location.hash!='#'+t)history.pushState(null,'','#'+t);setTab(t)};addEventListener('resize',()=>{moveInd();hdr()});
+$('.tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;const t=b.dataset.tab;if(t==st.tab&&!document.body.classList.contains('studio')){scrollTo({top:0,behavior:RM?'auto':'smooth'});return}if(location.hash!='#'+t)history.pushState(null,'','#'+t);setTab(t)};addEventListener('resize',()=>{drawHeader();moveInd();hdr()});
 function theme(){const go=()=>{const t=document.documentElement.dataset.theme=document.documentElement.dataset.theme=='dark'?'light':'dark';SV('theme',t);localStorage.theme=t;$('meta[name=theme-color]').content=t=='dark'?'#111111':'#ffffff'};if(document.startViewTransition&&!RM){const v=document.startViewTransition(go);v.ready.catch(()=>{});v.finished.catch(()=>{})}else go()}
 $('#theme').onclick=theme;$('#help').onclick=()=>$('#helpBox').hidden=false;$('#helpBox').onclick=e=>{if(e.target.id=='helpBox'||e.target.dataset.close!=null)$('#helpBox').hidden=true};
 // 滚动
@@ -124,10 +150,10 @@ let sc=false;addEventListener('scroll',()=>{const s=scrollY>24;if(s!=sc){sc=s;do
 $('#toTop').onclick=()=>scrollTo({top:0,behavior:RM?'auto':'smooth'});
 // 收藏导入导出 / 最近
 $('#exp').onclick=()=>{if(!st.fav.size)return toast('还没有收藏可导出');const items=[...st.fav].map(k=>ITEMS[k]).filter(Boolean).map(it=>({类型:TL(it),编号:it.id,名称:title(it),中文:prompt(it,'zh'),英文:prompt(it,'en'),key:it.k}));
- const b=new Blob([JSON.stringify({app:'衣姿 PoseWear',导出时间:new Date().toLocaleString('zh-CN'),收藏:items},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='衣姿-收藏-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);toast('已导出 '+items.length+' 条收藏')};
-$('#imp').onclick=()=>$('#impF').click();$('#impF').onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text());const ks=(j.收藏||[]).map(x=>x.key).filter(k=>/^[pcrad]:/.test(k));await needKeys(ks);let n=0;ks.forEach(k=>{if(ITEMS[k]&&!st.fav.has(k)){st.fav.add(k);n++}});SV('fav',[...st.fav]);counts();setTab('fav');toast('已导入 '+n+' 条收藏')}catch(err){toast('导入失败：文件格式不正确')}e.target.value=''};
-$('#clrRec').onclick=()=>{if(!st.rec.length)return;const old=st.rec.slice();st.rec=[];SV('rec',[]);counts();viewT(apply);toast(`已清空 ${old.length} 条记录`,()=>{st.rec=old;SV('rec',old);counts();viewT(apply)})};
-$('#clrFav').onclick=()=>{if(!st.fav.size)return toast('还没有收藏');const old=[...st.fav];st.fav=new Set();SV('fav',[]);counts();viewT(apply);toast(`已清空 ${old.length} 条收藏`,()=>{st.fav=new Set(old);SV('fav',old);counts();viewT(apply)})};
+ const b=new Blob([JSON.stringify({app:'衣姿 PoseWear',导出时间:new Date().toLocaleString('zh-CN'),收藏:items},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=tr('衣姿-收藏-{date}.json',{date:new Date().toISOString().slice(0,10)});a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);toast('已导出 {count} 条收藏',null,{count:items.length})};
+$('#imp').onclick=()=>$('#impF').click();$('#impF').onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text());const ks=(j.收藏||[]).map(x=>x.key).filter(k=>/^[pcrad]:/.test(k));await needKeys(ks);let n=0;ks.forEach(k=>{if(ITEMS[k]&&!st.fav.has(k)){st.fav.add(k);n++}});SV('fav',[...st.fav]);counts();setTab('fav');toast('已导入 {count} 条收藏',null,{count:n})}catch(err){toast('导入失败：文件格式不正确')}e.target.value=''};
+$('#clrRec').onclick=()=>{if(!st.rec.length)return;const old=st.rec.slice();st.rec=[];SV('rec',[]);counts();viewT(apply);toast('已清空 {count} 条记录',()=>{st.rec=old;SV('rec',old);counts();viewT(apply)},{count:old.length})};
+$('#clrFav').onclick=()=>{if(!st.fav.size)return toast('还没有收藏');const old=[...st.fav];st.fav=new Set();SV('fav',[]);counts();viewT(apply);toast('已清空 {count} 条收藏',()=>{st.fav=new Set(old);SV('fav',old);counts();viewT(apply)},{count:old.length})};
 document.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b){history.pushState(null,'','#'+b.dataset.go);setTab(b.dataset.go)}});
 $('#introX').onclick=()=>{localStorage.introX=1;const el=$('#intro');RM?document.documentElement.classList.add('nointro'):el.animate([{opacity:1,height:el.offsetHeight+'px'},{opacity:0,height:0,paddingTop:0,paddingBottom:0,marginBottom:0}],{duration:220,easing:'cubic-bezier(.2,.7,.2,1)'}).finished.then(()=>document.documentElement.classList.add('nointro'))};
 $('#annX').onclick=()=>{localStorage.annAnime=1;document.documentElement.classList.add('noann')};
@@ -144,23 +170,24 @@ let lbPushed=false;const pend=new Set();function lbOpen(i,c){if(i<0||!st.list[i]
 let closing=false;function lbClose(){if($('#lb').hidden||closing)return;if(lbPushed){lbPushed=false;history.back()}const it=st.list[li],c=it&&grid.querySelector(`.card[data-k="${CSS.escape(it.k)}"]`),r=c&&c.querySelector('.ph').getBoundingClientRect();
  const vis=r&&r.bottom>0&&r.top<innerHeight;const done=()=>{closing=false;$('#lb').hidden=true;document.body.style.overflow='';$('.lb-box').getAnimations().forEach(a=>a.cancel());if(location.hash.includes('/'))history.replaceState(null,'','#'+st.tab);c&&c.querySelector('.phk').focus({preventScroll:true});if(st.tab=='fav'){pend.forEach(k=>!st.fav.has(k)&&dropCard(k))}pend.clear()};
  if(RM)return done();closing=true;$('.lb-bg').animate([{opacity:1},{opacity:0}],{duration:220,fill:'both'}).finished.then(a=>a.cancel());rectAnim($('.lb-box'),vis?r:null,true).finished.then(done)}
-function lbDraw(){const it=st.list[li];if(!it)return;const img=$('#lbImg'),box=$('.lb-img'),src=big(it),D=it.type=='depth';addRec(it.k);
+function lbDraw(translateOnly=false){const it=st.list[li];if(!it)return;const img=$('#lbImg'),box=$('.lb-img'),src=big(it),D=it.type=='depth';if(!translateOnly){addRec(it.k);
  history.replaceState(null,'','#'+it.type+'/'+it.id);
  box.classList.toggle('ext',!!it.ext);box.classList.remove('fail');const miss=$('#lbMiss');if(it.site)miss.href=it.site;
  img.referrerPolicy=it.ref||'';img.onerror=()=>{if(D&&img.dataset.src==src){box.classList.add('fail');box.classList.remove('loading')}};
  if(img.dataset.src!=src){img.dataset.src=src;img.removeAttribute('srcset');img.src=thumb(it);img.classList.add('lo');box.classList.add('loading');preload(src).then(s=>{if(img.dataset.src!=src)return;if(s){img.src=s;if(it.type=='costume'||it.type=='anime'){img.sizes='(max-width:760px) 100vw, 60vw';img.srcset=`${it.m} 1080w, ${it.i} 1366w`}img.classList.remove('lo');box.classList.remove('loading');box.classList.remove('fail')}else if(D){box.classList.add('fail');box.classList.remove('loading');img.classList.remove('lo')}})}
- [1,-1,2].forEach(d=>{const n=st.list[(li+d+st.list.length)%st.list.length];n&&preload(big(n))});if(it.angles)it.angles.forEach(a=>preload(a.i));
+ [1,-1,2].forEach(d=>{const n=st.list[(li+d+st.list.length)%st.list.length];n&&preload(big(n))});if(it.angles)it.angles.forEach(a=>preload(a.i));}
  const P=it.type=='pose',isF=st.fav.has(it.k),isS=st.sel.includes(it.k);img.alt=title(it);
- const zh=`<div class="pbox"><small>中文描述</small><p>${esc(prompt(it,'zh'))}</p><button class="sm pri" data-c="zh">复制中文</button></div>`,en=`<div class="pbox en"><small>英文提示词 · PROMPT</small><p>${esc(prompt(it,'en'))}</p><button class="sm" data-c="en">复制英文</button></div>`;
- const ang=P||D, meta=ang?it.line+' · '+it.cat+(D?' · '+it.angles[it.ai].zh:'')+' · 编号 '+it.no:it.type=='portrait'?it.sec+' · '+it.len+' · 编号 '+it.no+(it.rk?' · 人气第 '+it.rk+' 名':''):it.cat+' · 编号 '+it.id;
- const jaLine=D?`<div class="jp">日文原名：${esc(it.ja)}</div><div class="jp">${esc(it.lineJa)} · ${esc(it.catJa)} · ${esc(it.angles[it.ai].ja)}</div>`:(P?`<div class="jp">日文原名：${esc(it.ja)}</div>`:'');
- const srcLink=D?`<p class="creditln"><b>${esc(it.unofficial||'非官方汉化')}</b> ${esc(it.credit||'')}</p><a class="goext" href="${esc(it.site)}" target="_blank" rel="noopener">在原站查看</a>`:'';
- $('#lbSide').innerHTML=`<div class="mu">${TNAME[['fav','recent'].includes(st.tab)?st.tab:it.type]} · 第 ${li+1} / ${st.list.length} 项</div><h2>${esc(title(it))}</h2><div class="mu">${esc(meta)}</div>
- ${jaLine}${ang?`<div class="angsel" role="group" aria-label="拍摄角度">${it.angles.map((a,i)=>`<button class="chip ${i==it.ai?'on':''}" data-ai="${i}">${esc(a.zh)}</button>`).join('')}</div>`:''}
- ${st.lang=='en'?en+zh:zh+en}${ang?'':it.type=='portrait'?`<div class="jp">日文原名：${esc(it.ja)}　·　CC0 1.0，AI 生成的虚构人物，请勿用于冒充真人</div>`:`<div class="jp">原始关键词：${esc(it.kw)}</div>`}
+ const zh=`<div class="pbox"><small>${txl('中文描述')}</small><p lang="zh-CN">${esc(prompt(it,'zh'))}</p><button class="sm pri" data-c="zh">${txl('复制中文')}</button></div>`,en=`<div class="pbox en"><small>${txl('英文提示词 · PROMPT')}</small><p lang="en">${esc(prompt(it,'en'))}</p><button class="sm" data-c="en">${txl('复制英文')}</button></div>`;
+ const ang=P||D, meta=[...(ang?[tr(it.line),tr(it.cat),D&&tr(it.angles[it.ai].zh)]:it.type=='portrait'?[tr(it.sec),tr(it.len)]:[tr(it.cat)]),tr('编号 {id}',{id:it.no||it.id}),it.rk&&tr('人气第 {rank}',{rank:it.rk})].filter(Boolean).join(' · ');
+ const jaLine=D?`<div class="jp">${txl('日文原名：{name}',{name:it.ja})}</div><div class="jp">${esc(it.lineJa)} · ${esc(it.catJa)} · ${esc(it.angles[it.ai].ja)}</div>`:(P?`<div class="jp">${txl('日文原名：{name}',{name:it.ja})}</div>`:'');
+ const srcLink=D?`<p class="creditln"><b>${txl(it.unofficial||'非官方汉化')}</b> ${txl(it.credit||'')}</p><a class="goext" href="${esc(it.site)}" target="_blank" rel="noopener">${txl('在原站查看')}</a>`:'';
+ const previousSimilar=translateOnly&&$('#lbSim');
+ $('#lbSide').innerHTML=`<div class="mu">${txl(TNAME[['fav','recent'].includes(st.tab)?st.tab:it.type])} · ${txl('第 {index} / {count} 项',{index:li+1,count:st.list.length})}</div><h2>${esc(title(it))}</h2><div class="mu">${esc(meta)}</div>
+ ${jaLine}${ang?`<div class="angsel" role="group" aria-label="${txl('拍摄角度')}">${it.angles.map((a,i)=>`<button class="chip ${i==it.ai?'on':''}" data-ai="${i}">${txl(a.zh)}</button>`).join('')}</div>`:''}
+ ${st.lang=='en'?en+zh:zh+en}${ang?'':it.type=='portrait'?`<div class="jp">${txl('日文原名：{name}',{name:it.ja})}　·　${txl('CC0 1.0，AI 生成的虚构人物，请勿用于冒充真人')}</div>`:`<div class="jp">${txl('原始关键词：{words}',{words:it.kw})}</div>`}
  ${srcLink}
- <div class="mact"><button data-x="fav" class="${isF?'on':''}" aria-label="${isF?'取消收藏':'收藏'}">${isF?'♥':'♡'}</button><button data-x="share">分享</button>${D?'':`<button data-x="try" class="pri">${P?'用作姿势参考':it.type=='portrait'?'用作人物参考':'试穿这套'}</button>`}</div> <div class="acts"><button data-x="fav">${isF?'♥ 已收藏':'♡ 收藏'}</button><button data-x="sel" class="${isS?'':'pri'}">${isS?'✓ 已在组合中':'＋ 加入组合'}</button>${D?'':`<button data-x="try">${P?'用作姿势参考':it.type=='portrait'?'用作人物参考':'试穿这套'}</button>`}<button data-x="share">分享链接</button>${D?'':`<button data-x="dlx">下载图片</button><button data-x="cpimg">复制图片</button><a href="${orig(it)}" download="posewear-${it.type}-${it.id}${P?'-'+it.ai:''}.png" class="dl"><button tabindex="-1">下载原图 PNG</button></a>${P||it.type=='portrait'?'':`<a href="https://s.taobao.com/search?q=${encodeURIComponent([...val(it,'col').slice(0,1),...val(it,'item').slice(0,2)].join(' ')||'女装 '+it.cat)}" target="_blank" rel="noopener" class="dl"><button tabindex="-1">淘宝搜同款 ↗</button></a>`}`}</div>
-<div id="lbSim"></div><p class="mu" style="margin-top:22px;line-height:2.1"><kbd>←</kbd><kbd>→</kbd>切换　${ang?'<kbd>↑</kbd><kbd>↓</kbd>角度　':''}<kbd>F</kbd>收藏　<kbd>A</kbd>组合　<kbd>C</kbd>复制　<kbd>S</kbd>分享</p>`;window.X&&X.lb(it)}
+ <div class="mact"><button data-x="fav" class="${isF?'on':''}" aria-label="${txl(isF?'取消收藏':'收藏')}">${isF?'♥':'♡'}</button><button data-x="share">${txl('分享')}</button>${D?'':`<button data-x="try" class="pri">${txl(P?'用作姿势参考':it.type=='portrait'?'用作人物参考':'试穿这套')}</button>`}</div> <div class="acts"><button data-x="fav">${isF?'♥':'♡'} ${txl(isF?'已收藏':'收藏')}</button><button data-x="sel" class="${isS?'':'pri'}">${isS?'✓':'＋'} ${txl(isS?'已在组合中':'加入组合')}</button>${D?'':`<button data-x="try">${txl(P?'用作姿势参考':it.type=='portrait'?'用作人物参考':'试穿这套')}</button>`}<button data-x="share">${txl('分享链接')}</button>${D?'':`<button data-x="dlx">${txl('下载图片')}</button><button data-x="cpimg">${txl('复制图片')}</button><a href="${orig(it)}" download="posewear-${it.type}-${it.id}${P?'-'+it.ai:''}.png" class="dl"><button tabindex="-1">${txl('下载原图 PNG')}</button></a>${P||it.type=='portrait'?'':`<a href="https://s.taobao.com/search?q=${encodeURIComponent([...val(it,'col').slice(0,1),...val(it,'item').slice(0,2)].join(' ')||'女装 '+it.cat)}" target="_blank" rel="noopener" class="dl"><button tabindex="-1">${txl('淘宝搜同款 ↗')}</button></a>`}`}</div>
+<div id="lbSim"></div><p class="mu" style="margin-top:22px;line-height:2.1"><kbd>←</kbd><kbd>→</kbd>${txl('切换')}　${ang?`<kbd>↑</kbd><kbd>↓</kbd>${txl('角度')}　`:''}<kbd>F</kbd>${txl('收藏')}　<kbd>A</kbd>${txl('组合')}　<kbd>C</kbd>${txl('复制')}　<kbd>S</kbd>${txl('分享')}</p>`;if(previousSimilar){$('#lbSim').replaceWith(previousSimilar);const header=previousSimilar.querySelector('.simh');if(header)header.textContent=tr('相似推荐')}else window.X&&X.lb(it)}
 const share=()=>copy(location.href,'分享链接');
 $('#lbSide').onclick=e=>{const it=st.list[li],t=e.target.closest('button');if(!t)return;if(t.dataset.ai){setAng(it,+t.dataset.ai);lbDraw()}if(t.dataset.c)copy(prompt(it,t.dataset.c),t.dataset.c=='en'?'英文提示词':'中文描述');if(t.dataset.x=='fav')toggleFav(it.k);if(t.dataset.x=='sel')toggleSel(it.k);if(t.dataset.x=='share')share();if(t.dataset.x=='try'){lbClose();window.WB&&WB.pick(it)}};
 const step=d=>{li=(li+d+st.list.length)%st.list.length;lbDraw();if(!RM)$('#lbImg').animate([{opacity:.3,transform:`translateX(${d*30}px)`},{opacity:1,transform:'none'}],{duration:320,easing:'cubic-bezier(.16,1,.3,1)'})};
@@ -175,10 +202,10 @@ addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey)return;const ae
  else if(e.key=='Tab'){const f=[...$('#lb').querySelectorAll('button,a[href]')].filter(x=>x.offsetParent);if(!f.length)return;const a=f[0],z=f[f.length-1];if(e.shiftKey&&ae==a){e.preventDefault();z.focus()}else if(!e.shiftKey&&ae==z){e.preventDefault();a.focus()}}});
 let tx,ty;$('.lb-img').addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY},{passive:true});$('.lb-img').addEventListener('touchend',e=>{const d=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;if(Math.abs(d)>50&&Math.abs(d)>Math.abs(dy))step(d<0?1:-1);else if(dy>90)lbClose()});
 // 数字滚动
-function countUp(){$$('.stats b').forEach(b=>{const n=+(st.adult&&b.dataset.na||b.dataset.n);if(RM||b.textContent.trim()!='0'){b.textContent=n.toLocaleString('zh-CN');return}const t0=performance.now();const f=t=>{const p=Math.min((t-t0)/1400,1);b.textContent=Math.round(n*(1-Math.pow(1-p,4))).toLocaleString('zh-CN');p<1&&requestAnimationFrame(f)};requestAnimationFrame(f)})}
+function countUp(){$$('.stats b').forEach(b=>{const n=+(st.adult&&b.dataset.na||b.dataset.n);if(RM||b.textContent.trim()!='0'){b.textContent=n.toLocaleString(htmlLocale());return}const t0=performance.now();const f=t=>{const p=Math.min((t-t0)/1400,1);b.textContent=Math.round(n*(1-Math.pow(1-p,4))).toLocaleString(htmlLocale());p<1&&requestAnimationFrame(f)};requestAnimationFrame(f)})}
 // 路由
 function openById(id){let i=st.list.findIndex(x=>x.id==id);if(i>=0)return lbOpen(i);const it=(DATA[st.tab]||[]).find(x=>x.id==id);if(!it)return toast('未找到该条目');
- if(!ok(it))return ageAsk(()=>openById(id));st.f={};st.q='';$('#q').value='';drawFilters();apply();i=st.list.findIndex(x=>x.id==id);if(i>=0)lbOpen(i)}
+ if(!ok(it))return ageAsk(()=>openById(id));st.f={};st.q='';st.qAliases=[];$('#q').value='';st.suggestion='';drawFilters();apply();i=st.list.findIndex(x=>x.id==id);if(i>=0)lbOpen(i)}
 function route(){const [t,id]=location.hash.slice(1).split('/');const tab=TABS.includes(t)?t:'pose';if(!id&&tab==st.tab&&st.list.length)return;if(tab!=st.tab||!st.list.length||!id)setTab(tab,id&&decodeURIComponent(id));else openById(decodeURIComponent(id))}
 // 成人内容开关
 function ageSet(on,anim){st.adult=on;SV('adult',on);if(on)SV('ageOk',true);document.body.classList.toggle('adult',on);$('#adultSw').setAttribute('aria-checked',on);drawAgeSwitch();counts();countUp();if(st.tab&&st.tab!='studio'&&st.tab!=''){const f=()=>{drawFilters();apply()};anim?viewT(f):f()}window.WB&&WB.show&&st.tab=='studio'&&WB.show()}
@@ -192,8 +219,35 @@ $('#ageN').onclick=$('#ageBox').onclick=e=>{if(e.target.id!='ageN'&&e.target.id!
 document.addEventListener('click',e=>{const b=e.target.closest('[data-age]');if(!b)return;st.adult?(ageSet(false),toast('已隐藏成人内容')):ageAsk()});
 $('#privO').onclick=e=>{e.preventDefault();$('#privBox').hidden=false};$('#privBox').onclick=e=>{if(e.target.id=='privBox'||e.target.dataset.close!=null)$('#privBox').hidden=true};
 addEventListener('hashchange',()=>{const id=location.hash.split('/')[1];if(!$('#lb').hidden){if(id)return;lbPushed=false;lbClose();setTimeout(route,closing?280:0);return}route()});
-addEventListener('uilocalechange',()=>{drawHeader();drawAgeSwitch();if(!$('#ageBox').hidden)drawAgeDialog();moveInd();hdr()});
 drawHeader();setLang(st.lang,true);ageSet(st.adult);hdr();countUp();needKeys([...st.sel]).then(()=>tray()).catch(()=>{});st.tab='';if(Q0&&!location.hash)history.replaceState(null,'','?q='+encodeURIComponent(Q0)+'#'+(TABS.includes(QT)?QT:'costume'));route();
+// 並び順、読み込んだ画像、選択状態を維持したまま表示を更新する。
+addEventListener('uilocalechange',()=>{
+ drawHeader();drawAgeSwitch();if(!$('#ageBox').hidden)drawAgeDialog();
+ if(st.suggestion)$('#q').value=tr(st.suggestion);
+ countUp();moveInd();hdr();paintDepth();tray();
+ const notice=$('#toast');
+ if(notice.classList.contains('on')&&notice._message&&notice.firstChild){
+  const {t,params}=notice._message;
+  notice.firstChild.nodeValue=tr(t,typeof params=='function'?params():params);
+  const undo=notice.querySelector('button');if(undo)undo.textContent=tr('撤销');
+ }
+ if(FDEF[st.tab]&&!grid.classList.contains('gbusy')){
+  drawFilters();
+  if($('#retry'))drawLoadError(st.tab);else{drawCount();drawEmpty()}
+ }
+ grid.querySelectorAll('.grp[data-group]').forEach(el=>el.textContent=tr(el.dataset.group));
+ grid.querySelectorAll('.card[data-k]').forEach(el=>{
+  const next=document.createElement('template');
+  next.innerHTML=card(ITEMS[el.dataset.k]);
+  el.querySelector('.ph').dataset.loadError=next.content.querySelector('.ph').dataset.loadError;
+  // ボタンと角度の選択状態は、現行のカードを作る処理から再利用する。
+  ['.miss','.angs','.unrec','.cbtns','.try','.info'].forEach(selector=>{
+   const current=el.querySelector(selector),replacement=next.content.querySelector(selector);
+   if(current&&replacement)current.replaceWith(replacement);
+  });
+ });
+ if(!$('#lb').hidden)lbDraw(true);
+});
 if('serviceWorker'in navigator&&location.protocol!='file:')addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 
-window.APP={ok,ageAsk,toggleFav,toggleSel,lbOpen,lbClose,apply,li:()=>li,load,ITEMS,DATA,thumb,big,ath,title,prompt,toast,esc,setTab,st,copy};
+window.APP={ok,ageAsk,toggleFav,toggleSel,lbOpen,lbClose,apply,li:()=>li,load,ITEMS,DATA,thumb,big,ath,title,prompt,toast,esc,setTab,st,copy,searchSuggestion,suggestions:SUGG};
