@@ -217,6 +217,7 @@ async function browse(page) {
   const studioLink = page.getByRole('link', { name: 'Try on online' });
   assert.equal(await galleryLink.getAttribute('href'), '/#costume');
   assert.equal(await studioLink.getAttribute('href'), '/#studio');
+  assert.match(await page.locator('body').innerText(), /Japanese/i);
   await galleryLink.click();
   await wait(page, () => window.APP?.st.tab === 'costume');
   await page.goBack();
@@ -246,6 +247,137 @@ async function failedCatalog(browser) {
 }
 
 // 提供元に送る本文と画像は実際の HTTP リクエストから読み取る。画像 API の応答だけを差し替える。
+async function studio(page) {
+  const img = (await fs.readFile(path.join(fixtures, 'mk1.png'))).toString('base64');
+  const requests = [];
+  let status = 200;
+  await page.route(/https:\/\/api\.openai\.com\//, async route => {
+    const headers = {
+      'access-control-allow-origin': '*',
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': '*',
+    };
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers });
+      return;
+    }
+    requests.push(route.request().postData());
+    const message = status === 401 ? 'Incorrect API key provided: local-mock-key' : 'mock-provider-message';
+    const body = status === 200 ? { data: [{ b64_json: img }] } : { error: { message } };
+    await route.fulfill({ status, headers, json: body });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem('wbCfg', JSON.stringify({ prov: 'openai', key: 'local-mock-key', proxy: false }));
+  });
+  await page.goto(origin + '/#studio');
+  await visible(page, '#wbStage');
+  await locale(page, 'ja');
+  await page.click('details.adv summary');
+  await page.click('[data-pl=zh]');
+  const chinesePrompt = await page.inputValue('#wbPrompt');
+  assert.match(chinesePrompt, /^根据参考图/);
+  await locale(page, 'en');
+  assert.equal(await page.inputValue('#wbPrompt'), chinesePrompt);
+  await page.reload();
+  await visible(page, '#wbStage');
+  assert.match(await page.locator('[data-pl=zh]').getAttribute('class'), /\bon\b/);
+  assert.equal(await page.inputValue('#wbPrompt'), chinesePrompt);
+  await locale(page, 'ja');
+  await page.setInputFiles('#wbFile', path.join(fixtures, 'person.png'));
+  await page.setInputFiles('#wbGFile', path.join(fixtures, 'mk2.png'));
+  await page.click('details.adv summary');
+  const custom = 'Local test prompt, light gray cardigan';
+  const additional = 'Overcast daylight';
+  await page.fill('#wbExtra', additional);
+  await page.fill('#wbPrompt', custom);
+  await page.uncheck('#wbNeutral');
+  await locale(page, 'en');
+  assert.equal(await page.inputValue('#wbExtra'), additional);
+  assert.equal(await page.inputValue('#wbPrompt'), custom);
+  await page.click('#wbGo');
+  await visible(page, '#wbOutAct');
+  assert.match(await page.getAttribute('#wbAfter', 'src'), /^blob:/);
+  assert.equal(requests.length, 1);
+  assert.ok(requests[0].includes(`name="prompt"\r\n\r\n${custom}\r\n`));
+  assert.equal([...requests[0].matchAll(/name="image\[\]"/g)].length, 2);
+  await visible(page, '#wbHist [data-t]');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#wbDl')]);
+  assert.match(download.suggestedFilename(), /\.png$/);
+  await locale(page, 'ja');
+  await page.click('#wbGo');
+  await wait(page, () => document.querySelectorAll('#wbHist [data-t]').length === 2);
+  assert.match(await page.getAttribute('#wbAfter', 'src'), /^blob:/);
+  assert.ok(requests[1].includes(`name="prompt"\r\n\r\n${custom}\r\n`));
+  await locale(page, 'en');
+  for (const code of [401, 500]) {
+    status = code;
+    await page.click('#wbGo');
+    await visible(page, '#wbErr');
+    const english = await text(page, '#wbErr');
+    assert.match(english, code === 401 ? /key is invalid or expired/i : /provider error/i);
+    assert.doesNotMatch(english, /local-mock-key/);
+    await locale(page, 'ja');
+    assert.notEqual(await text(page, '#wbErr'), english);
+    await visible(page, '#wbErr');
+    assert.equal(await page.inputValue('#wbExtra'), additional);
+    assert.equal(await page.inputValue('#wbPrompt'), custom);
+    await locale(page, 'en');
+  }
+  assert.equal(requests.length, 4);
+}
+
+async function capture(browser) {
+  await fs.mkdir(screenshots, { recursive: true });
+  for (const [name, viewport] of [['desktop', { width: 1440, height: 900 }], ['mobile', { width: 390, height: 844 }]]) {
+    const context = await browser.newContext({ locale: 'en', viewport, isMobile: name === 'mobile', hasTouch: name === 'mobile', reducedMotion: 'reduce' });
+    try {
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      page.on('console', message => {
+        if (message.type() === 'error') errors.push(message.text());
+      });
+      await page.goto(origin);
+      await wait(page, () => APP.st.tab === 'pose' && document.querySelector('#grid .card img')?.naturalWidth > 0);
+      for (const code of Object.keys(languages)) {
+        await locale(page, code);
+        await gallery(page, 'pose');
+        await page.evaluate(() => scrollTo(0, 0));
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), `${name} ${code}: page overflows`);
+        const anglesFit = await page.locator('#grid .card .angs').first().evaluate(angles => {
+          const frame = angles.getBoundingClientRect();
+          return Array.from(angles.children).every(angle => {
+            const bounds = angle.getBoundingClientRect();
+            return bounds.left >= frame.left - 1 && bounds.right <= frame.right + 1;
+          });
+        });
+        assert.ok(anglesFit, `${name} ${code}: gallery angle labels are clipped`);
+        await page.screenshot({ path: path.join(screenshots, `${name}-${code}-gallery.png`) });
+        await page.click('#adultSw');
+        await visible(page, '#ageBox');
+        await page.screenshot({ path: path.join(screenshots, `${name}-${code}-common.png`) });
+        await page.click('#ageN');
+        await page.click('[data-tab=studio]');
+        await visible(page, '#wbStage');
+        // ページ全体がオーバーフローを隠していても、列や操作が画面外にある場合は失敗にする。
+        const clipped = await page.evaluate(() => {
+          const controls = document.querySelectorAll('#studio .st-l, #studio .st-c, #studio .st-r, #studio .step .lnk, #studio #wbOnbGo');
+          return [...controls].filter(control => {
+            const bounds = control.getBoundingClientRect();
+            return bounds.width > 0 && (bounds.left < -1 || bounds.right > document.documentElement.clientWidth + 1);
+          }).map(control => control.id || control.textContent.trim().slice(0, 30));
+        });
+        assert.deepEqual(clipped, [], `${name} ${code}: studio controls are clipped`);
+        await page.evaluate(() => scrollTo(0, 0));
+        await page.screenshot({ path: path.join(screenshots, `${name}-${code}-studio.png`) });
+      }
+      assert.deepEqual(errors, []);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 (async () => {
   await dictionaries();
   console.log('PASS translation pairs and interpolation parameters');
@@ -262,11 +394,15 @@ async function failedCatalog(browser) {
       console.log('PASS help, privacy and accessibility text across three locales');
       await browse(page);
       console.log('PASS gallery, clipboard, favorites and English SEO');
+      await studio(await context.newPage());
+      console.log('PASS studio uploads, prompt, result, download, history and errors');
     } finally {
       await context.close();
     }
     await failedCatalog(browser);
     console.log('PASS localized catalog failure and retry');
+    await capture(browser);
+    console.log('PASS desktop and mobile screenshots across three locales');
   } finally {
     await browser.close();
   }

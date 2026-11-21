@@ -29,7 +29,7 @@ Pose, outfit and portrait reference galleries with bilingual prompts, plus a bri
 - **Generation history**: stored locally in IndexedDB. You can view, delete or clear items, and undo.
 - **Clear errors**: an invalid key, a rate limit, a timeout or a safety block each get their own message and a suggested next step.
 - **Reduce false safety blocks**: on by default. The studio rewrites its prompt into a neutral e-commerce try-on description without changing the outfit or pose. Turn it off to send the prompt as is.
-- Favorites, recent items and prompt combos, all stored locally; an 18+ toggle with age confirmation; PWA and offline support; dark mode; a Chinese/English UI.
+- Favorites, recent items and prompt combos, all stored locally; an 18+ toggle with age confirmation; PWA and offline support; dark mode; a Simplified Chinese, English and Japanese interface. Choose the display language in the header. Description and prompt languages have separate controls.
 
 ### Providers
 

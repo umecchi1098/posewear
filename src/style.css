@@ -563,6 +563,28 @@ button:active:not(:disabled){transform:scale(.97)}.tabs button:active,.chip:acti
   .tabs { flex-shrink: 0; }
 }
 
+/* 翻訳でラベルが長くなっても、試着の各列とダイアログを画面幅に収めます。 */
+#studio .step .sh, #studio .q2 .row, #cfg .cfg-f { flex-wrap: wrap; }
+#studio .q2 .lab, #studio .q2 select { min-width: 0; }
+#wbCharTxt, #wbExtra { min-height: 6.25em; }
+#pkQ { min-width: 0; }
+#pkT { min-width: 0; flex-shrink: 1; }
+#cfgX { margin-inline-start: auto; }
+#pk .pk-g button { min-width: 0; }
+#pk .pk-g span { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 860px) {
+  #studio .st-app { grid-template-columns: minmax(0, 1fr); }
+  #pk .pk-g { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  #pk .pk-h { flex-wrap: wrap; gap: 8px; }
+  #pkT { flex: 1 0 calc(100% - 52px); order: -2; }
+  #pkX { order: -1; }
+  #cfg .cfg-f { padding-inline: 14px; }
+  #cfg .cfg-f .sp { flex: 0 0 100%; height: 0; }
+  #cfTest { margin-left: auto; }
+}
+
 /* スマートフォンでも、入力例と入力した検索語を読める横幅を確保します。 */
 @media (max-width: 540px) {
   .top .tools { order: 1; margin-left: auto; }
