@@ -18,6 +18,7 @@ python3 scripts/serve-comfy-experiment.py
 
 1. Windows の Chrome で、普段使っているローカルの ComfyUI を開き、接続先とポートを控えます。以下は `http://127.0.0.1:8188` の例です。Desktop などで別のポートを使っている場合は、そのポートを PoseWear に入力します。
 2. ComfyUI の起動引数に `--enable-cors-header http://192.168.1.105:8787` を追加して再起動します。許可元は **Mac の PoseWear のアドレス**です。末尾のスラッシュや `/#studio` は付けません。ComfyUI は Windows のループバックアドレスで待ち受ければ十分です。
+   - **Stability Matrix 版**は「Packages」で対象の ComfyUI の「⋯ → Launch Options」を開き、「Extra Launch Arguments」に引数を追加して「Save → Restart」を実行します。
    - **Portable 版**は普段の起動用 `.bat` を実験用にコピーし、`main.py` を起動している行の末尾に引数を足します。GPU やメモリに関する既存の引数はそのまま使えます。
    - **Desktop 版**は対象インスタンスの「Manage」→「Startup Args」→「Startup Arguments」に同じ引数を追加し、「Restart to apply」で再起動します。[Comfy Desktop の起動引数設定](https://docs.comfy.org/installation/desktop/usage/manage)ソースから起動している場合は、普段の `python main.py` のコマンドに同じ引数を追加します。
 3. Windows の PowerShell から次のように確認できます。ポートと Origin は自分の環境に合わせます。
@@ -28,7 +29,28 @@ curl.exe -i -H "Origin: http://192.168.1.105:8787" "http://127.0.0.1:8188/system
 
 `HTTP/1.1 200`、`Access-Control-Allow-Origin: http://192.168.1.105:8787`、本文に `system` と `devices` があれば、サーバー側の準備は完了です。起動方法と引数は [ComfyUI Portable 公式ガイド](https://docs.comfy.org/installation/comfyui_portable_windows) と [ComfyUI の引数一覧](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/cli_args.py) を参照してください。
 
-## 3. 試着ワークフローを選ぶ
+## 3. Qwen Image 2.1 でポーズごとに生成する
+
+Windows で人物・衣装の生成を確認した Qwen Image 2.1＋Prompt Enhancer を使います。以前の2入力設定から切り替えるときは、同じ Chrome・同じ URL で PoseWear を再読み込みしてください。
+
+1. 「試着 → API設定 → ComfyUI」の「ポーズ参照付きワークフローのサンプルをダウンロード」を押し、保存した `posewear-qwen21-pose-api.json` を「ワークフローの API JSON」に指定します。モデル名が以前の実験用 JSON と同じなので、その Windows 環境では既存モデルを利用できます。
+2. 読み込み時に選ばれた下表のノードを確認して「保存」を押します。接続先は Windows 側で動作確認した ComfyUI のアドレスです。
+3. 人物写真1枚、服装画像1枚を選びます。ポーズ欄で線画を2種類選び、必要に応じて各ポーズの角度を変更します。最初は生成枚数を「1」にして「生成」を押してください。
+4. 人物と衣装を最初に各1回アップロードし、線画だけを切り替えて2ジョブを順番に実行します。2枚の結果を見比べ、人物と服が保たれ、それぞれの姿勢・撮影角度が線画に対応するかを確認します。再読み込み後は履歴から両方の結果を開けます。
+
+| 設定項目 | サンプルのノード ID |
+|---|---|
+| 人物画像 | `470` |
+| 服装画像 | `475` |
+| ポーズ画像 | `490` |
+| 結果を保存 | `461` |
+| プロンプト | `488`（Prompt Enhancer に渡す編集指示） |
+| アスペクト比 | `13` |
+| シード | `459:458` |
+
+ポーズは最大6件です。スタジオの生成枚数は**ポーズ1件あたり**の枚数です。たとえばポーズ2種類・各2枚なら、シードを変えて合計4ジョブを実行します。生成後は画像ごとの履歴と ZIP ダウンロードを利用できます。プロンプトは選んだ角度やスタイルを反映してジョブごとに組み立てます。手動編集した本文は各ジョブで共通です。ポーズをすべて外した場合、同梱の Qwen Image 2.1 ワークフローは人物と衣装の2入力で実行します。
+
+## 4. 人物と服だけを使う既存ワークフロー
 
 **すでに Windows で動いている試着ワークフローがあれば、そのまま使えます。** 人物と服に別々の標準 `LoadImage` ノードを使い、完成画像を標準 `SaveImage` に接続します。試着の指示文・出力サイズ・シードはワークフロー内で指定し、ComfyUI の「Export (API)」または「Save (API Format)」で JSON を保存します。通常の画面編集用 JSON と API 形式は異なります。追加の画像やマスクが必須のワークフローでは、その入力も事前に Windows 側で設定してください。
 
@@ -43,7 +65,7 @@ curl.exe -i -H "Origin: http://192.168.1.105:8787" "http://127.0.0.1:8188/system
 
 サンプルは人物の縦横比に合わせて約75万画素に調整します。モデル配布先は [画像編集モデル](https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI/tree/main/split_files/diffusion_models)、[テキストエンコーダーと VAE](https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/tree/main/split_files)、[Lightning LoRA](https://huggingface.co/lightx2v/Qwen-Image-Lightning/tree/main/Qwen-Image-Edit-2509) です。モデル構成は [ComfyUI 公式テンプレート](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/image_qwen_image_edit_2509.json) を参照しています。
 
-## 4. Windows の Chrome から1枚生成する
+### 2入力のサンプルで1枚生成する
 
 1. Chrome で `http://192.168.1.105:8787/#studio` を開き、「API設定」で **ComfyUI** を選びます。
 2. 「ComfyUI の接続先」に Windows 自身の ComfyUI のアドレスを入力し、「接続テスト」を押します。Chrome にローカルネットワークへのアクセスを求められたら、この実験サイトに許可します。「ComfyUI に接続できました」と表示されることを確認します。

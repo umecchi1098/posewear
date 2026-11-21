@@ -23,7 +23,8 @@ static_files.append('fonts.css')
 shutil.copyfile('fonts/OFL.txt',f'{D}/NotoSansJP-OFL.txt')
 # Windowsのブラウザーから、設定画面と同じホストにある試着用の見本を取得できます。
 os.makedirs(f'{D}/workflows',exist_ok=True)
-shutil.copyfile('workflows/try-on-qwen-2509-api.json',f'{D}/workflows/try-on-qwen-2509-api.json')
+for workflow in ['try-on-qwen-2509-api.json', 'posewear-qwen21-pose-api.json']:
+  shutil.copyfile(f'workflows/{workflow}',f'{D}/workflows/{workflow}')
 shutil.copyfile('docs/comfyui-windows.md',f'{D}/comfyui-windows.md')
 app=open('src/app.js').read()
 if AH: app=app.replace("const AH='';",f"const AH='{AH}/';")
