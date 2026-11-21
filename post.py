@@ -13,7 +13,7 @@ def put(name,data):
 put('poses.json',PJ);put('costumes.json',CJ);put('anime.json',AJ);put('portraits.json',RJ);put('depths.json',DJ)
 # 翻訳辞書もキャッシュの版に含め、更新後に古い辞書が残らないようにします。
 ui_files=['ui.js','messages-common.js','messages-gallery.js','messages-studio.js']
-static_files=['style.css',*ui_files,'zip.js','extras.js','studio.js']
+static_files=['style.css',*ui_files,'zip.js','extras.js','comfy.js','studio.js']
 for f in static_files: put(f,open(f'src/{f}','rb').read())
 # フォントの内容が変わると CSS とキャッシュの URL も変わる。ライセンスも同じサイトで配信する。
 font_name='noto-sans-jp.woff2'
@@ -21,6 +21,10 @@ font_path=put(font_name,open(f'fonts/{font_name}','rb').read())
 put('fonts.css',open('src/fonts.css').read().replace(f'../fonts/{font_name}',f'/{font_path}'))
 static_files.append('fonts.css')
 shutil.copyfile('fonts/OFL.txt',f'{D}/NotoSansJP-OFL.txt')
+# Windowsのブラウザーから、設定画面と同じホストにある試着用の見本を取得できます。
+os.makedirs(f'{D}/workflows',exist_ok=True)
+shutil.copyfile('workflows/try-on-qwen-2509-api.json',f'{D}/workflows/try-on-qwen-2509-api.json')
+shutil.copyfile('docs/comfyui-windows.md',f'{D}/comfyui-windows.md')
 app=open('src/app.js').read()
 if AH: app=app.replace("const AH='';",f"const AH='{AH}/';")
 app=app.replace("'poses.json'","'/"+A['poses.json']+"'").replace("'costumes.json'","'/"+A['costumes.json']+"'").replace("'anime.json'","'/"+A['anime.json']+"'").replace("'portraits.json'","'/"+A['portraits.json']+"'").replace("'depths.json'","'/"+A['depths.json']+"'")
