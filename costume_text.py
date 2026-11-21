@@ -11,6 +11,42 @@ N={'blouse':('衬衫','top'),'camisole':('吊带','top'),'shirt':('衬衣','top'
 SOLO={'knit':('针织衫','top'),'denim':('牛仔外套','outer'),'lace':('蕾丝','acc'),'fur':('毛绒披肩','outer'),'ribbon':('蝴蝶结','acc'),'leather':('皮夹克','outer'),'frill':('荷叶边','acc'),'mini':('迷你裙','bottom')}
 EN_SOLO={'knit':'knit top','denim':'denim jacket','fur':'fur stole','leather':'leather jacket','mini':'miniskirt','lace':'lace trim','frill':'frills','ribbon':'ribbon'}
 SKIRT_LEN={'mini':'短裙','midi':'中长裙','maxi':'长裙'}
+
+# 素材元と同じ英語の単語をキーにして、衣装の名前と説明で日本語の用語を揃える。
+JA_COLOR = {
+    'beige': 'ベージュ', 'black': '黒', 'blue': '青', 'brown': 'ブラウン',
+    'burgundy': 'ボルドー', 'cream': 'クリーム色', 'gold': 'ゴールド', 'green': '緑',
+    'grey': 'グレー', 'ivory': 'アイボリー', 'khaki': 'カーキ', 'lavender': 'ラベンダー',
+    'mint': 'ミント', 'navy': 'ネイビー', 'olive': 'オリーブ', 'orange': 'オレンジ',
+    'pink': 'ピンク', 'purple': '紫', 'red': '赤', 'silver': 'シルバー',
+    'white': '白', 'yellow': '黄色',
+}
+JA_MODIFIER = {
+    'chiffon': 'シフォン', 'corduroy': 'コーデュロイ', 'denim': 'デニム',
+    'floral': '花柄の', 'frill': 'フリル付き', 'fur': 'ファー', 'knit': 'ニット',
+    'lace': 'レース', 'leather': 'レザー', 'mesh': 'メッシュ', 'pleated': 'プリーツ',
+    'polka-dot': '水玉の', 'satin': 'サテン', 'suede': 'スエード', 'tulle': 'チュール',
+    'velvet': 'ベルベット', 'wool': 'ウール', 'ribbon': 'リボン付き',
+    'maxi': 'マキシ丈の', 'midi': 'ミディ丈の', 'mini': 'ミニ',
+}
+JA_NOUN = {
+    'blouse': 'ブラウス', 'camisole': 'キャミソール', 'shirt': 'シャツ',
+    'sweater': 'セーター', 'turtleneck': 'タートルネック', 'hoodie': 'パーカー',
+    'vest': 'ベスト', 'bra': 'ブラジャー', 'corset': 'コルセット',
+    'cardigan': 'カーディガン', 'coat': 'コート', 'jacket': 'ジャケット', 'robe': 'ガウン',
+    'skirt': 'スカート', 'shorts': 'ショートパンツ', 'pants': 'パンツ', 'jeans': 'ジーンズ',
+    'briefs': 'ショーツ', 'dress': 'ワンピース', 'swimsuit': '水着', 'apron': 'エプロン',
+    'socks': 'ソックス', 'tights': 'タイツ', 'stockings': 'ストッキング',
+    'sneakers': 'スニーカー', 'boots': 'ブーツ', 'heels': 'ハイヒール',
+    'loafers': 'ローファー', 'pumps': 'パンプス', 'sandals': 'サンダル',
+    'bag': 'バッグ', 'tote': 'トートバッグ', 'beanie': 'ニット帽', 'beret': 'ベレー帽',
+    'hat': '帽子', 'headband': 'カチューシャ', 'belt': 'ベルト', 'choker': 'チョーカー',
+    'gloves': '手袋', 'muffler': 'マフラー', 'scarf': 'スカーフ', 'necklace': 'ネックレス',
+    'sunglasses': 'サングラス', 'knit': 'ニット', 'denim': 'デニムジャケット',
+    'lace': 'レース飾り', 'fur': 'ファーストール', 'ribbon': 'リボン',
+    'leather': 'レザージャケット', 'frill': 'フリル', 'mini': 'ミニスカート',
+}
+
 def parse(kw):
   t=kw.split();out=[];mods=[];i=0
   for j,w in enumerate(t):
@@ -109,3 +145,58 @@ def gen2(kw,cat,cid):
   tags=[enp(m,w) for m,w,_,_ in items]
   en=', '.join(dict.fromkeys([cat+' outfit']+tags))
   return zh,en,t
+
+
+def outfit_text(keywords, category_en, category_ja, item_id):
+    """同じ衣装のキーワードから、一覧用の短い名前と生成用の詳しい説明を作る。"""
+    zh, en, title_zh = gen2(keywords, category_en, item_id)
+    items = []
+    for modifiers, word, _, slot in parse(keywords):
+        # 素材元は服の間にも空白しか入れない。「frill knit denim mini skirt」は
+        # ニットの次に別の生地のボトムスが始まる。「knit skirt」「knit dress」は一着として残す。
+        if slot == 'bottom' and 'knit' in modifiers:
+            knit = modifiers.index('knit')
+            if knit + 1 < len(modifiers) and modifiers[knit + 1] in ('denim', 'leather', 'corduroy', 'suede', 'satin'):
+                items.append((modifiers[:knit], 'knit', 'top'))
+                modifiers = modifiers[knit + 1:]
+        items.append((modifiers, word, slot))
+    pieces = []
+    by_slot = {}
+    for modifiers, word, slot in items:
+        # 未登録の新しい品名が来ても原語を残し、素材自体は公開できるようにする。
+        noun = JA_NOUN.get(word, word)
+        colors = [JA_COLOR[m] for m in modifiers if m in JA_COLOR]
+        details = [JA_MODIFIER[m] for m in modifiers if m in JA_MODIFIER
+                   and not (m == 'denim' and word == 'jeans')
+                   and (word in ('skirt', 'dress') or m not in SKIRT_LEN)]
+        fabric = ''.join(details)
+        color = 'と'.join(colors).replace('ミントと緑', 'ミントグリーン').replace('オリーブと緑', 'オリーブグリーン')
+        piece = (color + 'の' if color else '') + fabric + noun
+        pieces.append(piece)
+        # タイトルは主役の服が分かる長さに収める。色・素材・小物まで含む全文は説明に残す。
+        short_ja = piece
+        if len(short_ja) > 12:
+            short_ja = noun
+            for detail in reversed(details):
+                if len(detail + short_ja) > 12:
+                    break
+                short_ja = detail + short_ja
+        english = enp(modifiers, word)
+        short_en = english if len(english.split()) <= 3 else enp(modifiers[-1:], word)
+        by_slot.setdefault(slot, (short_ja, short_en))
+
+    # ワンピースは一着で主役になる。上下のある衣装はトップスとボトムスを組み合わせる。
+    if 'one' in by_slot:
+        slots = ['one', 'outer']
+    else:
+        slots = ['top' if 'top' in by_slot else 'outer', 'bottom']
+    names = [by_slot[s] for s in slots if s in by_slot] or list(by_slot.values())[:2]
+    title_ja = ' × '.join(pair[0] for pair in names) or category_ja
+    title_en = ' + '.join(pair[1] for pair in names) or category_en + ' outfit'
+    season_or_theme = {'ランジェリー': 'ランジェリースタイル', 'パーティ': 'パーティースタイル',
+                       'セクシー': 'セクシーな装い', '水着': '水着スタイル'}.get(category_ja, category_ja + 'の装い')
+    prompt_ja = season_or_theme + '。'
+    if pieces:
+        prompt_ja += '、'.join(dict.fromkeys(pieces)) + 'を合わせる。'
+    return {'zh': zh, 'en': en, 'ti': title_zh, 'titleJa': title_ja,
+            'titleEn': title_en[:1].upper() + title_en[1:], 'promptJa': prompt_ja}

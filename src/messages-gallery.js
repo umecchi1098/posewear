@@ -1,5 +1,8 @@
 // ギャラリー表示用の文言。中国語のキーは既存データの値と合わせる。
 UI.register({
+  "日文提示词": ["Japanese prompt", "日本語のプロンプト"],
+  "复制日文": ["Copy Japanese", "日本語をコピー"],
+  "描述语言：日文提示词": ["Description language: Japanese", "説明文の言語：日本語"],
   "{tab} · 衣姿 PoseWear": ["{tab} · PoseWear", "{tab} · PoseWear"],
   "姿势库": ["Pose Library", "ポーズ集"],
   "深度姿势": ["Depth Poses", "深度ポーズ"],

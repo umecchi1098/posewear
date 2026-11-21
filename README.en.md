@@ -8,7 +8,7 @@
 
 # PoseWear 衣姿
 
-Pose, outfit and portrait reference galleries with bilingual prompts, plus a bring-your-own-key AI try-on studio that runs in your browser.
+Pose, outfit and portrait reference galleries with prompts in English, Japanese and Chinese, plus a bring-your-own-key AI try-on studio that runs in your browser.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-f38020?logo=cloudflare&logoColor=white)](https://pages.cloudflare.com/)
@@ -23,13 +23,13 @@ Pose, outfit and portrait reference galleries with bilingual prompts, plus a bri
 
 ## Features
 
-- **Five galleries**: poses (multi-angle line sketches), depth poses (hotlinked depth maps), outfits (by season and type), anime outfits (anime-style looks), and portraits (face references, CC0). Every image has a Chinese description and an English prompt you can copy.
-- **Search and filters**: search in Chinese or English, filter by category, sort, or pick a random image. Each item has its own static page for sharing.
+- **Five galleries**: poses (multi-angle line sketches), depth poses (hotlinked depth maps), outfits (by season and type), anime outfits (anime-style looks), and portraits (face references, CC0). Item titles follow the interface language. You can copy prompts in English, Japanese or Chinese.
+- **Search and filters**: search by Chinese, English or Japanese titles, filter by category, sort, or pick a random image. Each item has its own static page for sharing.
 - **Try-on studio**: upload a photo, pick an outfit and a pose, then generate. You can also generate without a photo. It supports several outputs per run, a before/after slider, and single or zip download.
 - **Generation history**: stored locally in IndexedDB. You can view, delete or clear items, and undo.
 - **Clear errors**: an invalid key, a rate limit, a timeout or a safety block each get their own message and a suggested next step.
 - **Reduce false safety blocks**: on by default. The studio rewrites its prompt into a neutral e-commerce try-on description without changing the outfit or pose. Turn it off to send the prompt as is.
-- Favorites, recent items and prompt combos, all stored locally; an 18+ toggle with age confirmation; PWA and offline support; dark mode; a Simplified Chinese, English and Japanese interface. Choose the display language in the header. Description and prompt languages have separate controls.
+- Favorites, recent items and prompt combos, all stored locally; an 18+ toggle with age confirmation; PWA and offline support; dark mode; a Simplified Chinese, English and Japanese interface. Choose the display language in the header. Prompts default to English. In the studio, open the Japanese preview to check the wording while keeping English selected for generation.
 
 ### Providers
 
@@ -44,7 +44,7 @@ Pose, outfit and portrait reference galleries with bilingual prompts, plus a bri
 
 ### 2026-11-19 · Anime outfits library
 
-- New **Anime outfits** tab: 1,320 anime-style outfits from COSTUME-ANIME-DB by [@giaaibusi](https://x.com/giaaibusi), in the same 8 categories as the outfit library (spring 197 / summer 237 / autumn 230 / winter 232 / lingerie 197 / party 36 / swimwear 52 / sexy 139), each with Chinese and English prompts.
+- New **Anime outfits** tab: 1,320 anime-style outfits from COSTUME-ANIME-DB by [@giaaibusi](https://x.com/giaaibusi), in the same 8 categories as the outfit library (spring 197 / summer 237 / autumn 230 / winter 232 / lingerie 197 / party 36 / swimwear 52 / sexy 139), each with English, Japanese and Chinese prompts.
 - Lingerie and sexy categories (336 items) are treated as adult content: hidden by default behind the 18+ toggle (984 public items).
 - Anime outfits support the full outfit feature set: category / colour / item filters, search suggestions, favourites, recent views, prompt combos, bilingual detail pages and sitemap; the try-on studio can pick anime outfits directly from the garment step.
 - Homepage announcement bar and anime counts added; `scripts/fetch-assets.py` gains an `anime` source (and now also fetches the outfit thumbnails it used to miss).

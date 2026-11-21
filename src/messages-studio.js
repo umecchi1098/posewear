@@ -2,6 +2,9 @@
 
 // 試着スタジオの表示文言。各項目は英語と日本語の順です。
 window.UI.register({
+  "查看日语译文": ["Show Japanese translation", "日本語訳を表示"],
+  "日语译文": ["Japanese translation", "日本語訳"],
+  "译文对应上方原始提示词，发送时会应用中性措辞设置。": ["This translation covers the original prompt above. The neutral wording setting applies when sending.", "上のプロンプトの日本語訳です。送信時に中立表現の設定が適用されます。"],
   "豆包 Seedream": ["Seedream", "Seedream"],
   "自定义中转": ["Custom gateway", "カスタムゲートウェイ"],
   "东亚女性": ["East Asian woman", "東アジア系の女性"],

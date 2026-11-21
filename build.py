@@ -1,5 +1,5 @@
 import json,os,shutil,subprocess,depthpack
-from costume_text import gen2
+from costume_text import outfit_text
 import hashlib,re,html as H
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
@@ -18,13 +18,33 @@ pd=json.load(open(f'{R}/pose/data.json'))['D']; cd=json.load(open(f'{R}/costume/
 poses={}
 for d in pd:
   k=d['id'].rsplit('_',1)[0]; zh,en=TR[d['ポーズ名']]
-  p=poses.setdefault(k,{'id':k,'no':d['ポーズ番号'],'line':LINE[d['系統']][0],'cat':CAT[d['分類']],'ja':d['ポーズ名'],'zh':zh,'en':en,'lineEn':LINE[d['系統']][1],'angles':[]})
-  a=ANG[d['アングル']]; p['angles'].append({'zh':a[0],'en':a[1],'t':'p/t/'+d['id']+'.webp','i':'p/i/'+d['id']+'.webp','o':'o/p/'+d['id']+'.png','_src':d})
-cos=[{'id':d['id'],'cat':CC[d['カテゴリ']][0],'catEn':CC[d['カテゴリ']][1],'kw':d['キーワード'],**dict(zip(('zh','en','ti'),gen2(d['キーワード'],CC[d['カテゴリ']][1],d['id']))),'t':'c/t/'+os.path.basename(d['サムネ']),'m':'c/m/'+d['id']+'.webp','i':'c/i/'+os.path.basename(d['画像']),'o':'o/c/'+d['id']+'.png','_src':d} for d in cd]
-acs=[{'id':d['id'],'cat':CC[d['カテゴリ']][0],'catEn':CC[d['カテゴリ']][1],'kw':d['キーワード'],**dict(zip(('zh','en','ti'),gen2(d['キーワード'],CC[d['カテゴリ']][1],d['id']))),'t':'a/t/'+os.path.basename(d['サムネ']),'m':'a/m/'+d['id']+'.webp','i':'a/i/'+os.path.basename(d['画像']),'o':'o/a/'+d['id']+'.png','_src':d} for d in ad]
+  # 素材元の日本語名を維持し、選んだ角度を画面側で付け足せるように分けておく。
+  name = d['ポーズ名']
+  p = poses.setdefault(k, {
+      'id': k, 'no': d['ポーズ番号'], 'line': LINE[d['系統']][0], 'lineEn': LINE[d['系統']][1],
+      'lineJa': d['系統'], 'cat': CAT[d['分類']], 'catJa': d['分類'], 'ja': name,
+      'titleJa': name, 'titleEn': en[:1].upper() + en[1:], 'promptJa': name, 'zh': zh, 'en': en, 'angles': [],
+  })
+  a=ANG[d['アングル']]; p['angles'].append({'zh':a[0],'en':a[1],'ja':d['アングル'],'t':'p/t/'+d['id']+'.webp','i':'p/i/'+d['id']+'.webp','o':'o/p/'+d['id']+'.png','_src':d})
+
+def outfit_record(d, folder):
+  # 通常衣装とアニメ衣装は同じ語彙を使う。画像のディレクトリはそれぞれのものを維持する。
+  category = d['カテゴリ']
+  zh, en = CC[category]
+  item_id = d['id']
+  return {'id': item_id, 'cat': zh, 'catEn': en, 'catJa': category, 'kw': d['キーワード'],
+          **outfit_text(d['キーワード'], en, category, item_id),
+          't': f"{folder}/t/" + os.path.basename(d['サムネ']), 'm': f'{folder}/m/{item_id}.webp',
+          'i': f"{folder}/i/" + os.path.basename(d['画像']), 'o': f'o/{folder}/{item_id}.png', '_src': d}
+
+cos=[outfit_record(d, 'c') for d in cd]
+acs=[outfit_record(d, 'a') for d in ad]
 # 双人 分类人工复核（看图）
 FIX={'pair60_P031':'坐位','pair60_P053':'立位贴身','pair60_P055':'侧位','pair60_P058':'贴脸'}
-for k,v in FIX.items(): poses[k]['cat']=v
+for k,v in FIX.items():
+  poses[k]['cat']=v
+  # 画像の再分類は日本語ラベルにも適用し、言語を切り替えても同じ分類を示す。
+  poses[k]['catJa']=next(ja for ja, zh in CAT.items() if zh == v)
 ADULT_LINES={'双人互动','全身·性感'};ADULT_CATS={'挤胸·乳沟','性感·大胆'};ADULT_COS={'内衣','性感'}
 for p in poses.values():
   if p['line'] in ADULT_LINES or p['cat'] in ADULT_CATS: p['a']=1
@@ -62,6 +82,14 @@ for d in rd:
   zh=f"一位亚洲年轻女性，{ln[0]}{'，'+sz if sz else ''}，{'正面半身肖像，浅灰纯色背景，柔和均匀的光线' if d['section']=='face' else '自拍风生活照，室内自然光'}。作为人物面部参考，保持五官和脸型一致。"
   en=f"young Asian woman, {ln[1]}{', '+se if se else ''}, {sec[1]}, consistent facial features, face reference"
   it={'id':d['id'],'no':no,'sec':sec[0],'len':ln[0],'st':sz,'ti':sz or f"{ln[0]} · {sec[0]}",'zh':zh,'en':en,'ja':d['style'] or d['hair'],'t':'r/t/'+d['id']+'.webp','m':'r/m/'+d['id']+'.webp','i':'r/m/'+d['id']+'.webp','o':'o/r/'+d['id']+'.png','w':d['w'],'h':d['h']}
+  # 髪型に原名があるときはそれを使い、無名の人物は髪の長さと撮影形式で見分けられるようにする。
+  face = d['section'] == 'face'
+  title_en = se or ln[1] + (' portrait' if face else ' lifestyle photo')
+  it['titleEn'] = title_en[:1].upper() + title_en[1:]
+  it['titleJa'] = d['style'] or d['hair'] + ('・正面ポートレート' if face else '・日常のスナップ')
+  style = '髪型は' + d['style'] + '。' if d['style'] else ''
+  setting = '淡いグレーの無地の背景で、柔らかく均一な光を当てた正面の上半身ポートレート' if face else '室内の自然光を使った自撮り風の日常写真'
+  it['promptJa'] = f"{d['hair']}ヘアの若いアジア人女性。{style}{setting}。顔の参考画像として使い、目鼻立ちと輪郭を保つ。"
   if d['id'] in RANK: it['rk']=RANK[d['id']]
   if d['id'] in RANKC: it['rc']=RANKC[d['id']]
   pors.append(it)

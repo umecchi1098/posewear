@@ -15,6 +15,12 @@ put('poses.json',PJ);put('costumes.json',CJ);put('anime.json',AJ);put('portraits
 ui_files=['ui.js','messages-common.js','messages-gallery.js','messages-studio.js']
 static_files=['style.css',*ui_files,'zip.js','extras.js','studio.js']
 for f in static_files: put(f,open(f'src/{f}','rb').read())
+# フォントの内容が変わると CSS とキャッシュの URL も変わる。ライセンスも同じサイトで配信する。
+font_name='noto-sans-jp.woff2'
+font_path=put(font_name,open(f'fonts/{font_name}','rb').read())
+put('fonts.css',open('src/fonts.css').read().replace(f'../fonts/{font_name}',f'/{font_path}'))
+static_files.append('fonts.css')
+shutil.copyfile('fonts/OFL.txt',f'{D}/NotoSansJP-OFL.txt')
 app=open('src/app.js').read()
 if AH: app=app.replace("const AH='';",f"const AH='{AH}/';")
 app=app.replace("'poses.json'","'/"+A['poses.json']+"'").replace("'costumes.json'","'/"+A['costumes.json']+"'").replace("'anime.json'","'/"+A['anime.json']+"'").replace("'portraits.json'","'/"+A['portraits.json']+"'").replace("'depths.json'","'/"+A['depths.json']+"'")
@@ -28,7 +34,7 @@ open(f'{D}/index.html','w').write(idx)
 for f in [*static_files,'app.js']:
   if os.path.exists(f'{D}/{f}'): os.remove(f'{D}/{f}')
 sw=open('src/sw.js').read().replace("const V='posewear-v9'",f"const V='{VER}'")
-sw=sw.replace('/* BUILD_PRECACHE */ []',json.dumps(['/','/favicon.svg']+['/'+A[f] for f in [*static_files,'app.js','poses.json','depths.json']]))
+sw=sw.replace('/* BUILD_PRECACHE */ []',json.dumps(['/','/favicon.svg']+['/'+A[f] for f in [*static_files,font_name,'app.js','poses.json','depths.json']]))
 open(f'{D}/sw.js','w').write(sw)
 import base64
 inl=re.findall(r'<script>(.*?)</script>',idx,re.S)

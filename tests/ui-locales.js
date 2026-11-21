@@ -66,6 +66,9 @@ async function startup(browser) {
         await page.reload();
         await visible(page, '#grid .card');
         assert.equal(await page.locator('html').getAttribute('lang'), 'ja');
+        // 通信を切った再読み込みでも、日本語用のフォントを実際に読み込めます。
+        await page.evaluate(() => document.fonts.ready);
+        assert.ok(await page.evaluate(() => [...document.fonts].some(face => face.family.includes('Noto Sans JP') && face.status === 'loaded')));
         await locale(page, 'en');
         assert.equal(await page.evaluate(() => localStorage.getItem('uiLocale')), 'en');
         await page.click('[data-tab=studio]');
@@ -148,7 +151,7 @@ async function browse(page) {
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), prompt);
   await page.keyboard.press('Escape');
   await page.locator('#lb').waitFor({ state: 'hidden' });
-  await page.click('[data-lang=en]');
+  await page.click('button[data-lang=en]');
   assert.equal(await card.locator('.sub').textContent(), prompt);
   await locale(page, 'zh');
   assert.equal(await card.locator('.sub').textContent(), prompt);
@@ -158,7 +161,7 @@ async function browse(page) {
   assert.equal(await page.locator('html').getAttribute('data-lang'), 'en');
   assert.equal(await card.locator('.sub').textContent(), prompt);
   const chineseDescription = await page.evaluate(key => APP.ITEMS[key].zh, key);
-  await page.click('[data-lang=zh]');
+  await page.click('button[data-lang=zh]');
   await locale(page, 'en');
   assert.equal(await card.locator('.sub').textContent(), chineseDescription);
 
@@ -246,6 +249,58 @@ async function failedCatalog(browser) {
   }
 }
 
+// 全種類の配布データを調べ、実画面でも同じ衣装を言語切り替え・検索・コピーで追います。
+async function localizedMaterials(page) {
+  await page.goto(origin + '/#costume');
+  await visible(page, '#grid .card');
+  const invalid = await page.evaluate(async () => {
+    const errors = [];
+    for (const type of ['pose','depth','portrait','costume','anime']) {
+      const items = await APP.load(type);
+      if (!items.length) errors.push(type);
+      for (const it of items) {
+        if (![it.titleJa,it.titleEn,it.promptJa,APP.prompt(it,'ja')].every(x => typeof x === 'string' && x.trim() && !x.includes('undefined'))) errors.push(it.k);
+        if (it.angles && (!it.lineJa || it.angles.some(a => !a.ja))) errors.push(it.k);
+      }
+    }
+    return errors.slice(0,10);
+  });
+  assert.deepEqual(invalid, []);
+  const card=page.locator('#grid .card').first();
+  const key=await card.getAttribute('data-k');
+  const item=await page.evaluate(k => APP.ITEMS[k],key);
+  for(const [code,name] of [['en',item.titleEn],['zh',item.ti],['ja',item.titleJa]]){
+    await locale(page,code);
+    assert.equal(await card.locator('h3').innerText(),name);
+    assert.equal(await card.locator('img').getAttribute('alt'),name);
+  }
+  await page.fill('#q',item.titleJa);
+  await wait(page,k=>APP.st.q===APP.ITEMS[k].titleJa && APP.st.list.some(it=>it.k===k),key);
+  const match=page.locator(`#grid .card[data-k="${key}"]`);
+  await match.locator('.phk').click();
+  assert.equal(await text(page,'#lbSide h2'),item.titleJa);
+  await page.click('#lb [data-prompt-lang=ja]');
+  assert.equal(await text(page,'#lb .pbox p'),item.promptJa);
+  await page.click('#lb [data-c=ja]');
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),item.promptJa);
+  await page.keyboard.press('Escape');
+  await match.locator('[data-a=sel]').click();
+  await page.click('[data-tl=ja]');
+  const combination=await text(page,'#trayText');
+  assert.match(combination,/最高品質/);
+  assert.ok(combination.includes(item.promptJa.replace(/。$/,'')));
+  await page.click('#trayCopy');
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),combination);
+  await page.click('#trayClear');
+  await page.click('#batchBtn');
+  await match.locator('.phk').click();
+  await page.click('#bbar [data-b=cp]');
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),item.promptJa);
+  await page.click('#bbar [data-b=x]');
+  await page.reload();
+  await visible(page,'#grid .card');
+  assert.deepEqual(await page.evaluate(()=>[APP.st.lang,APP.st.tl]),['ja','ja']);
+}
 // 提供元に送る本文と画像は実際の HTTP リクエストから読み取る。画像 API の応答だけを差し替える。
 async function studio(page) {
   const img = (await fs.readFile(path.join(fixtures, 'mk1.png'))).toString('base64');
@@ -324,6 +379,30 @@ async function studio(page) {
     await locale(page, 'en');
   }
   assert.equal(requests.length, 4);
+  // 訳を開いても英語の送信内容は変わらず、日本語を選んだ時だけ日本語が送られます。
+  status=200;
+  await page.click('[data-pl=en]');
+  await page.click('#wbReP');
+  const english=await page.inputValue('#wbPrompt');
+  await page.click('#wbJaPreview summary');
+  await wait(page,()=>document.querySelector('#wbJaText').value.length>0);
+  const japanese=await page.inputValue('#wbJaText');
+  assert.match(japanese,/参照画像/);
+  assert.equal(await page.inputValue('#wbPrompt'),english);
+  await page.click('#wbGo');
+  await wait(page,()=>!document.querySelector('#wbGo').disabled && !document.querySelector('#wbOutAct').hidden);
+  const sentBody = index => requests[index].match(/name="prompt"\r\n\r\n([\s\S]*?)\r\n--/)[1].replace(/\r\n/g,'\n');
+  assert.equal(sentBody(4),english);
+  await page.fill('#wbPrompt','Edited prompt');
+  assert.equal(await page.locator('#wbJaPreview').isVisible(),false);
+  await page.click('[data-pl=ja]');
+  assert.equal(await page.inputValue('#wbPrompt'),japanese);
+  await page.click('#wbGo');
+  await wait(page,()=>!document.querySelector('#wbGo').disabled && !document.querySelector('#wbOutAct').hidden);
+  assert.equal(sentBody(5),japanese);
+  await page.reload();
+  await visible(page,'#wbStage');
+  assert.match(await page.locator('[data-pl=ja]').getAttribute('class'),/\bon\b/);
 }
 
 async function capture(browser) {
@@ -390,10 +469,13 @@ async function capture(browser) {
       const page = await context.newPage();
       await page.goto(origin);
       await wait(page, () => window.APP && window.UI);
+      assert.deepEqual(await page.evaluate(()=>[APP.st.lang,APP.st.tl]),['en','en']);
       await common(page);
       console.log('PASS help, privacy and accessibility text across three locales');
       await browse(page);
       console.log('PASS gallery, clipboard, favorites and English SEO');
+      await localizedMaterials(page);
+      console.log('PASS translated catalog, Japanese title search, detail, combination and batch copy');
       await studio(await context.newPage());
       console.log('PASS studio uploads, prompt, result, download, history and errors');
     } finally {

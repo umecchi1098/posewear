@@ -1,5 +1,5 @@
 /* 衣姿 v6 · clean modern */
-:root{--sans:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+:root{
  --bg:#fff;--bg2:#fff;--sf:#f5f5f5;--sf2:#ebebeb;--tx:#111;--tx2:#555;--mu:#999;--line:#f0f0f0;--line2:#e3e3e3;--ac:#ff2442;--ac2:#e61e3a;--acs:rgba(255,36,66,.07);--ok:#21a366;--bad:#e5243b;
  --ph:#f3f3f3;--phw:#f4f4f4;--sh1:0 1px 3px rgba(0,0,0,.08);--sh2:0 4px 20px rgba(0,0,0,.08);--sh3:0 20px 60px rgba(0,0,0,.18);--out:cubic-bezier(.2,.7,.2,1);--r:14px;--w:1680px;color-scheme:light}
 [data-theme=dark]{--bg:#111;--bg2:#1b1b1b;--sf:#222;--sf2:#2c2c2c;--tx:#f2f2f2;--tx2:#bbb;--mu:#7a7a7a;--line:#262626;--line2:#333;--ac:#ff3b57;--ac2:#ff5a72;--acs:rgba(255,59,87,.12);--ph:#1e1e1e;--phw:#ececec;--sh2:0 4px 20px rgba(0,0,0,.5);--sh3:0 20px 60px rgba(0,0,0,.7);color-scheme:dark}
@@ -594,3 +594,7 @@ button:active:not(:disabled){transform:scale(.97)}.tabs button:active,.chip:acti
   #help { display: inline-grid; }
   .top .tools > a.icon { display: none; }
 }
+
+/* 言語ボタンを追加しても、狭い幅では右端の開閉ボタンまで折り返して操作できます。 */
+.tray-h { flex-wrap: wrap; }
+.pbox > .seg { margin-bottom: 10px; }

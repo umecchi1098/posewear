@@ -12,16 +12,19 @@ const PROV={openai:{name:'OpenAI',base:'https://api.openai.com/v1',model:'gpt-im
  custom:{name:'自定义中转',base:'',model:'gpt-image-1',models:['gpt-image-1','gpt-image-2','gemini-2.5-flash-image','flux-kontext-pro','qwen-image-edit','doubao-seedream-4-0-250828']}};
 const cfg=Object.assign({prov:'openai',base:'',key:'',model:'',field:'image[]',proto:'edits',proxy:false},LS('wbCfg')||{});
 // ---------- 预设 ----------
-const CHARS=[['asia','东亚女性','an adult East Asian woman in her mid-20s, long black hair, natural makeup, slim build','一位二十多岁的成年东亚女性，黑色长发，自然淡妆，身材纤细'],
- ['west','欧美女性','an adult Caucasian woman in her late 20s, wavy light-brown hair, natural makeup, athletic build','一位二十多岁的成年欧美女性，浅棕色波浪长发，自然妆容，匀称身材'],
- ['man','男性模特','an adult East Asian man in his late 20s, short black hair, clean-shaven, tall and lean','一位二十多岁的成年东亚男性，黑色短发，干净面容，高瘦身材'],
- ['anime','动漫角色','an adult anime-style girl, long silver hair, large expressive eyes, adult proportions, clean cel-shaded illustration','一位成年动漫风格女性角色，银色长发，大眼睛，成人身材比例，干净的赛璐璐上色插画'],
- ['custom','自定义','','']];
-const STYLES=[['keep','照片质感','photorealistic, matching the original photo quality','写实摄影质感，与原照片画质一致'],['studio','影棚大片','clean high-end fashion studio, soft key light, seamless light-grey backdrop, editorial lookbook photo','高端时尚影棚，柔和主光，浅灰无缝背景，杂志画册质感'],
- ['street','城市街拍','candid city street-style photo, natural daylight, shallow depth of field','城市街拍抓拍，自然日光，浅景深'],['ecom','电商白底','e-commerce product-model photo, pure white background, even lighting, full body','电商模特图，纯白背景，均匀布光，全身构图'],
- ['film','胶片氛围','35mm film photograph, warm tones, subtle grain, golden hour light','35mm 胶片摄影，暖色调，轻微颗粒，黄金时刻光线'],['anime','动漫插画','high-quality anime illustration, clean line art, soft cel shading','高质量动漫插画，干净线稿，柔和赛璐璐上色']];
+// モデル・スタイルの各行は、識別子、UIラベル、英語・中国語・日本語の生成指示です。
+const CHARS=[['asia','东亚女性','an adult East Asian woman in her mid-20s, long black hair, natural makeup, slim build','一位二十多岁的成年东亚女性，黑色长发，自然淡妆，身材纤细','20代半ばの成人の東アジア系女性。黒いロングヘア、自然なメイク、細身の体型'],
+ ['west','欧美女性','an adult Caucasian woman in her late 20s, wavy light-brown hair, natural makeup, athletic build','一位二十多岁的成年欧美女性，浅棕色波浪长发，自然妆容，匀称身材','20代後半の成人の欧米系女性。明るい茶色のウェーブヘア、自然なメイク、引き締まった体型'],
+ ['man','男性模特','an adult East Asian man in his late 20s, short black hair, clean-shaven, tall and lean','一位二十多岁的成年东亚男性，黑色短发，干净面容，高瘦身材','20代後半の成人の東アジア系男性。短い黒髪でひげがなく、背が高く細身'],
+ ['anime','动漫角色','an adult anime-style girl, long silver hair, large expressive eyes, adult proportions, clean cel-shaded illustration','一位成年动漫风格女性角色，银色长发，大眼睛，成人身材比例，干净的赛璐璐上色插画','成人のアニメ風女性キャラクター。銀色の長い髪と表情豊かな大きな目。成人の体型で、明快なセル塗りのイラスト'],
+ ['custom','自定义','','','']];
+const STYLES=[['keep','照片质感','photorealistic, matching the original photo quality','写实摄影质感，与原照片画质一致','元の写真の画質に合わせた写実的な写真'],['studio','影棚大片','clean high-end fashion studio, soft key light, seamless light-grey backdrop, editorial lookbook photo','高端时尚影棚，柔和主光，浅灰无缝背景，杂志画册质感','高級ファッション誌のルックブック風。柔らかな主照明と継ぎ目のない薄いグレーの背景のスタジオ写真'],
+ ['street','城市街拍','candid city street-style photo, natural daylight, shallow depth of field','城市街拍抓拍，自然日光，浅景深','自然光と浅い被写界深度を使った街中のストリートスナップ'],['ecom','电商白底','e-commerce product-model photo, pure white background, even lighting, full body','电商模特图，纯白背景，均匀布光，全身构图','通販の商品ページ用モデル写真。純白の背景、均一な照明、全身が入る構図'],
+ ['film','胶片氛围','35mm film photograph, warm tones, subtle grain, golden hour light','35mm 胶片摄影，暖色调，轻微颗粒，黄金时刻光线','暖色で粒子感のある35mmフィルム写真。ゴールデンアワーの光'],['anime','动漫插画','high-quality anime illustration, clean line art, soft cel shading','高质量动漫插画，干净线稿，柔和赛璐璐上色','整った線画と柔らかなセル塗りの、高精細なアニメイラスト']];
 const ANG_EN={'正面':'front view','斜侧':'three-quarter view','侧面':'side profile','俯拍':'high-angle shot looking down','仰拍':'low-angle shot looking up','背面':'back view','下から':'low angle'};
-const W={mode:LS('wbMode')||'tryon',persons:[],garments:[],poses:[],char:LS('wbChar')||'asia',charTxt:LS('wbCharTxt')||'',style:LS('wbStyle')||'keep',bm:LS('wbBm')||'each',pl:LS('wbPl')||'en',keepBg:LS('wbKeepBg')??true,busy:null,dirty:false,results:[],ri:0,cmp:true};
+// 保存済みの手動選択を引き継ぎ、初回や未知の値では英語で送信します。
+const savedPromptLanguage=LS('wbPl');
+const W={mode:LS('wbMode')||'tryon',persons:[],garments:[],poses:[],char:LS('wbChar')||'asia',charTxt:LS('wbCharTxt')||'',style:LS('wbStyle')||'keep',bm:LS('wbBm')||'each',pl:['en','zh','ja'].includes(savedPromptLanguage)?savedPromptLanguage:'en',keepBg:LS('wbKeepBg')??true,busy:null,dirty:false,results:[],ri:0,cmp:true};
 // item: {kind:'lib',k,ai?} | {kind:'file',blob,url,name}
 const g0=LS('wbSel')||{};
 // ---------- 工具 ----------
@@ -44,26 +47,65 @@ const b64=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result.sp
 const dataURL=async b=>'data:'+(b.type||'image/jpeg')+';base64,'+await b64(b);
 const isGen=()=>W.mode=='gen';const hasPerson=()=>W.persons.length>0;
 // ---------- 提示词 ----------
-function poseDesc(p,en){const it=A.ITEMS[p.k];if(!it)return'';const a=it.angles[p.ai??it.ai];return en?`${it.en} (${it.lineEn}, ${ANG_EN[a.zh]||a.en||a.zh})${/2人|双人/.test(it.line)?' — a two-person pose: match the number of people and their relative positions':''}`:`${it.zh}（${it.line}，${a.zh}）${/2人|双人/.test(it.line)?'——双人姿势，人数与相对位置需与线稿一致':''}`}
-function compose(poseSet){const en=W.pl=='en',P=W.persons.length,G=W.garments.length,ps=poseSet||W.poses,np=ps.length,sheet=np>1;const style=STYLES.find(s=>s[0]==W.style)||STYLES[0],ch=CHARS.find(c=>c[0]==W.char)||CHARS[0],ex=$('#wbExtra').value.trim();
- const gi=W.garments.map(g=>g.kind=='lib'&&A.ITEMS[g.k]).filter(Boolean);let n=0;const rng=(c)=>{if(!c)return null;const a=n+1,b=n+c;n=b;return a==b?(en?`image ${a}`:`第 ${a} 张`):(en?`images ${a}–${b}`:`第 ${a}–${b} 张`)};
+function poseDesc(p,lang){
+ const it=A.ITEMS[p.k];if(!it)return'';
+ const a=it.angles[p.ai??it.ai];
+ // 同じポーズでもカードと試着で別の角度を選べるため、試着側に保存した角度を使います。
+ if(lang=='ja')return `${it.promptJa}（${it.lineJa}、${a.ja}）${/2人|双人/.test(it.line)?'。2人の人数と位置関係を線画に合わせる':''}`;
+ return lang=='en'?`${it.en} (${it.lineEn}, ${ANG_EN[a.zh]||a.en||a.zh})${/2人|双人/.test(it.line)?' — a two-person pose: match the number of people and their relative positions':''}`:`${it.zh}（${it.line}，${a.zh}）${/2人|双人/.test(it.line)?'——双人姿势，人数与相对位置需与线稿一致':''}`}
+function compose(poseSet,lang=W.pl){const en=lang=='en',P=W.persons.length,G=W.garments.length,ps=poseSet||W.poses,np=ps.length,sheet=np>1;const style=STYLES.find(s=>s[0]==W.style)||STYLES[0],ch=CHARS.find(c=>c[0]==W.char)||CHARS[0],ex=$('#wbExtra').value.trim();
+ const gi=W.garments.map(g=>g.kind=='lib'&&A.ITEMS[g.k]).filter(Boolean);let n=0;const rng=(c)=>{if(!c)return null;const a=n+1,b=n+c;n=b;if(lang=='ja')return a==b?`画像${a}`:`画像${a}～${b}`;return a==b?(en?`image ${a}`:`第 ${a} 张`):(en?`images ${a}–${b}`:`第 ${a}–${b} 张`)};
  const rP=rng(P),rG=rng(G),rS=rng(np);const L=[];
  if(en){L.push(P?`Fashion ${isGen()?'image generation':'virtual try-on'} using reference images. ${rP} ${P>1?'show':'shows'} the person (same individual)${G?`; ${rG} ${G>1?'show':'shows'} the outfit${G>1?' pieces (top and bottom)':''} on an invisible mannequin`:''}${np?`; ${rS} ${np>1?'are':'is'} pose sketch${np>1?'es':''}`:''}.`:`Fashion image generation from reference images. ${G?`${rG} ${G>1?'show':'shows'} the outfit on an invisible mannequin`:''}${np?`; ${rS} ${np>1?'are':'is'} pose sketch${np>1?'es':''}`:''}.`);
   L.push(P?"Subject: the person from the photo. Preserve their face, identity, hairstyle, skin tone and body proportions exactly; they must stay recognisably the same adult.":`Subject: ${(W.char=='custom'?W.charTxt:ch[2])||ch[2]||'an adult model'}. Always an adult with adult proportions.`);
   if(G)L.push(`Outfit: dress the subject in the complete outfit from ${rG}, reproducing every garment faithfully — cut, color, fabric, pattern, layering, shoes and accessories${gi.length?': '+gi.map(x=>x.en.replace(/^[^,]*outfit,\s*/,'')).join('; '):''}. Replace the original clothing entirely. Never draw the mannequin or a blank body.`);
-  if(np)L.push((sheet&&W.bm=='sheet'?`Pose: draw ${np} panels in one image, one per pose sketch, same subject and outfit in every panel, with even spacing and no text: `:'Pose: ')+ps.map((p,i)=>(sheet&&W.bm=='sheet'?`(${i+1}) `:'')+poseDesc(p,true)).join('; ')+'. Use the sketch only for body posture, weight, limb placement and camera angle; never draw sketch lines, joint circles or guide marks.');
+  if(np)L.push((sheet&&W.bm=='sheet'?`Pose: draw ${np} panels in one image, one per pose sketch, same subject and outfit in every panel, with even spacing and no text: `:'Pose: ')+ps.map((p,i)=>(sheet&&W.bm=='sheet'?`(${i+1}) `:'')+poseDesc(p,'en')).join('; ')+'. Use the sketch only for body posture, weight, limb placement and camera angle; never draw sketch lines, joint circles or guide marks.');
   else if(P)L.push('Pose: keep the original pose, framing and camera angle.');
   L.push(`Look: ${P&&W.keepBg&&!isGen()?'keep the original background and lighting of the photo; ':''}${style[2]}. Natural fabric drape with realistic folds and shadows, high detail. No text, no watermark, no borders.`);
   if(ex)L.push('Additional: '+ex)}
+ else if(lang=='ja'){
+  // 画像番号・衣装・ポーズ・スタイルは英語版と同じ選択状態から組み立てます。
+  L.push(isGen()||!P?'参照画像を使ってファッション写真を生成する。':'参照画像を使って服を着せ替える。');
+  if(P)L.push(`${rP}は同一人物を写した参照写真。`);
+  if(G)L.push(`${rG}は透明マネキンに着せた服${G>1?'（トップスとボトムス）':''}の参照画像。`);
+  if(np)L.push(`${rS}はポーズの線画。`);
+  L.push(P?'人物：写真の人物の顔立ち、髪型、肌の色、体の比率と本人らしさを忠実に保ち、同じ成人だと分かるようにする。':
+   `人物：${(W.char=='custom'?W.charTxt:ch[4])||'成人のモデル'}。成人の体型で描く。`);
+  if(G)L.push(`服装：${rG}のコーディネートにすべて着替え、形、色、生地、柄、重ね着、靴、アクセサリーを忠実に再現する。${gi.map(it=>it.promptJa).join(' ')}マネキンや中身のない体は描かない。`);
+  if(np){
+   const panels=sheet&&W.bm=='sheet';
+   const poses=ps.map((p,i)=>(panels?`（${i+1}）`:'')+poseDesc(p,'ja'));
+   L.push((panels?`ポーズ：線画ごとに1コマずつ、1枚に${np}コマを並べる。全コマで同じ人物と服装を保ち、余白は均等にして文字は入れない。`:'ポーズ：')+poses.join('、')+'。線画は姿勢・重心・手足の位置・カメラの角度の参考のみに使い、輪郭線、関節の丸、補助線は描かない。');
+  }else if(P)L.push('ポーズ：元の写真の姿勢、構図、カメラの角度を保つ。');
+  L.push(`仕上げ：${P&&W.keepBg&&!isGen()?'元の背景と照明を保つ。':''}${style[4]}。布の落ち感やしわ、影を自然に描き、細部を鮮明にする。文字、透かし、枠は入れない。`);
+  if(ex)L.push('追加指示：'+ex);
+ }
  else{L.push(P?`时尚${isGen()?'生图':'虚拟试穿'}，使用参考图。${rP}是人物照片（同一人）${G?`；${rG}是放在隐形人台上的服装${G>1?'（上装与下装）':''}`:''}${np?`；${rS}是姿势线稿`:''}。`:`根据参考图进行时尚生图。${G?`${rG}是放在隐形人台上的服装`:''}${np?`；${rS}是姿势线稿`:''}。`);
   L.push(P?'人物：照片中的人。严格保留其面部、身份特征、发型、肤色与身材比例，必须一眼认出是同一位成年人。':`人物：${(W.char=='custom'?W.charTxt:ch[3])||ch[3]||'一位成年模特'}。始终为成年人比例。`);
   if(G)L.push(`服装：为人物换上${rG}中的整套服装，准确还原版型、颜色、面料、图案、叠穿、鞋袜与配饰${gi.length?'：'+gi.map(x=>x.zh.replace(/[。.]$/,'')).join('；'):''}。完全替换原有衣物，不要画出人台或空白身体。`);
-  if(np)L.push((sheet&&W.bm=='sheet'?`姿势：在同一张图中画 ${np} 格，每格对应一张线稿，人物与服装保持一致，均匀留白，不写文字：`:'姿势：')+ps.map((p,i)=>(sheet&&W.bm=='sheet'?`（${i+1}）`:'')+poseDesc(p,false)).join('；')+'。线稿只用于提取身体姿态、重心、四肢位置和镜头角度，不要画出线条、关节圆或辅助线。');
+  if(np)L.push((sheet&&W.bm=='sheet'?`姿势：在同一张图中画 ${np} 格，每格对应一张线稿，人物与服装保持一致，均匀留白，不写文字：`:'姿势：')+ps.map((p,i)=>(sheet&&W.bm=='sheet'?`（${i+1}）`:'')+poseDesc(p,'zh')).join('；')+'。线稿只用于提取身体姿态、重心、四肢位置和镜头角度，不要画出线条、关节圆或辅助线。');
   else if(P)L.push('姿势：保持原照片的姿势、构图和拍摄角度。');
   L.push(`画面：${P&&W.keepBg&&!isGen()?'保留原照片的背景与光线；':''}${style[3]}。衣物垂坠自然，褶皱阴影真实，高细节。不要文字、水印或边框。`);
   if(ex)L.push('补充：'+ex)}
  return L.join('\n')}
-function reprompt(force){if(force||!W.dirty){$('#wbPrompt').value=compose();W.dirty=false}}
+// 個別生成では各画像に渡す線画が1枚ずつ変わります。確認用の訳も送信時と同じ分け方にします。
+function poseSets(){
+ return W.poses.length>1&&W.bm=='each'?W.poses.map(p=>[p]):[W.poses];
+}
+function renderJapanesePreview(){
+ const preview=$('#wbJaPreview'),output=$('#wbJaText');
+ preview.hidden=W.pl=='ja'||W.dirty;
+ if(preview.hidden||!preview.open){output.value='';return}
+ const sets=poseSets();
+ output.value=sets.map((set,i)=>(sets.length>1?`【ポーズ${i+1}】\n`:'')+compose(set,'ja')).join('\n\n');
+ $('#wbJaNeutral').hidden=!neutralOn()||sets.every(isAdultJob);
+}
+function reprompt(force){
+ const input=$('#wbPrompt');
+ input.lang=W.pl=='zh'?'zh-CN':W.pl;
+ if(force||!W.dirty){input.value=compose();W.dirty=false}
+ renderJapanesePreview();
+}
 // ---------- 渲染 ----------
 // 素材名と撮影角度は、現在の画面言語に対応するデータを表示します。
 const displayLabel=(zh,en,ja)=>({en,ja}[UI.locale]||t(zh));
@@ -81,7 +123,10 @@ function render(localeOnly=false){const G=isGen();$$('[data-mode]').forEach(b=>b
  $('#wbPo').innerHTML=W.poses.length?W.poses.map((p,i)=>pickRow(p,'pose',i)).join(''):`<button class="empty0" data-pick="pose"><span><b>${t('选择姿势（可选）')}</b><small>${t(G?'不选就随机':'不选就保持原姿势')}</small></span></button>`;
  $('#wbBatch').hidden=W.poses.length<2;$$('[data-bm]').forEach(b=>b.classList.toggle('on',b.dataset.bm==W.bm));$('#wbAllAng').hidden=W.poses.length!=1||!A.ITEMS[(W.poses[0]||{}).k];
  $('#wbStyles').innerHTML=STYLES.map(s=>`<button class="chip ${W.style==s[0]?'on':''}" data-style="${s[0]}">${t(s[1])}</button>`).join('');$('#wbKeepBg').checked=W.keepBg;$('#wbKeepBg').closest('label').hidden=G||!hasPerson();
- $$('[data-pl]').forEach(b=>b.classList.toggle('on',b.dataset.pl==W.pl));
+ $$('[data-pl]').forEach(b=>{
+  const selected=b.dataset.pl==W.pl;
+  b.classList.toggle('on',selected);b.setAttribute('aria-pressed',String(selected));
+ });
  const ok=!!cfg.key;$('#wbDot').className='dot'+(ok?' on':'');$('#wbProv').textContent=ok?provider(cfg.prov)+' · '+modelOf():t('未配置 API');$('#wbDot2').className='dot'+(ok?' on':'');$('#wbProv2').textContent=ok?provider(cfg.prov):t('未配置 API');$('#wbOnb').hidden=ok;
  const dn=[G?true:hasPerson(),W.garments.length>0,W.poses.length>0,!!(W.style||$('#wbExtra').value)];$$('.step[data-s]').forEach(e=>e.classList.toggle('done',dn[e.dataset.s-1]));
  const jobs=nJobs();$('#wbEst').textContent=t('将生成 {count} 张',{count:jobs});
@@ -116,7 +161,8 @@ $('#studio').addEventListener('click',e=>{const t=e.target;let b;
 $('#studio').addEventListener('change',e=>{const s=e.target.closest('[data-ang]');if(s){W.poses[+s.dataset.ang].ai=+s.value;render()}if(e.target.id=='wbN')render();if(e.target.id=='wbKeepBg'){W.keepBg=e.target.checked;SV('wbKeepBg',W.keepBg);render()}});
 $('#wbCharTxt').oninput=e=>{W.charTxt=e.target.value;SV('wbCharTxt',W.charTxt);reprompt()};
 $('#wbAllAng').onclick=()=>{const p=W.poses[0],it=A.ITEMS[p.k];W.poses=it.angles.slice(0,6).map((a,i)=>({kind:'lib',k:p.k,ai:i}));toast('已展开 {count} 个角度',null,{count:W.poses.length});render()};
-$('#wbPrompt').oninput=()=>W.dirty=true;$('#wbExtra').oninput=()=>reprompt();$('#wbReP').onclick=()=>{reprompt(true);toast('已按当前选择重新生成提示词')};
+$('#wbJaPreview').ontoggle=renderJapanesePreview;
+$('#wbPrompt').oninput=()=>{W.dirty=true;renderJapanesePreview()};$('#wbExtra').oninput=()=>reprompt();$('#wbReP').onclick=()=>{reprompt(true);toast('已按当前选择重新生成提示词')};
 $('#wbCopyP').onclick=()=>A.copy($('#wbPrompt').value,'提示词');
 // ---------- 选择器 ----------
 let pkType='costume',pkSelected=false;
@@ -125,7 +171,13 @@ function pickerTitle(){
   t({pose:'选择姿势（可多选，最多 6 个）',portrait:'选择人像（作为人物 / 脸部参考）',anime:'选择动画服装',costume:'选择服装'}[pkType]);
 }
 async function picker(type){pkType=type;pkSelected=false;pickerTitle();$('#pkDone').hidden=type!='pose';$('#pk').hidden=false;document.body.style.overflow='hidden';$('#pkQ').value='';$('#pkG').innerHTML='<div class="skel"></div>'.repeat(12);await A.load(type);drawPk();setTimeout(()=>$('#pkQ').focus(),50)}
-function drawPk(){const q=$('#pkQ').value.toLowerCase().trim().split(/\s+/).filter(Boolean),L=A.DATA[pkType].filter(A.ok).filter(it=>q.every(w=>(it._s||[it.id,it.zh,it.en,it.cat,it.line||''].join(' ').toLowerCase()).includes(w))).slice(0,150),sel=new Set(W.poses.map(p=>p.k));
+function drawPk(){
+ const q=$('#pkQ').value.toLowerCase().trim().split(/\s+/).filter(Boolean);
+ const L=A.DATA[pkType].filter(A.ok).filter(it=>{
+  // ギャラリーを開かず直接試着を使った場合も、各言語のタイトルで検索できます。
+  const words=it._s||[it.id,it.titleJa,it.titleEn,it.ja,it.ti,it.zh,it.en,it.cat,it.line].join(' ').toLowerCase();
+  return q.every(word=>words.includes(word));
+ }).slice(0,150),sel=new Set(W.poses.map(p=>p.k));
  $('#pkG').innerHTML=L.length?L.map(it=>`<button data-k="${it.k}" class="${pkType} ${sel.has(it.k)?'on':''}" title="${esc(A.title(it))}"><img loading="lazy" src="${A.thumb(it)}" alt="${esc(A.title(it))}"><span>${esc(A.title(it))}</span></button>`).join(''):`<p class="fine">${t('没有匹配的结果')}</p>`}
 let pq;$('#pkQ').oninput=()=>{clearTimeout(pq);pq=setTimeout(drawPk,150)};const pkClose=()=>{$('#pk').hidden=true;document.body.style.overflow='';render()};$('#pkX').onclick=pkClose;$('#pkDone').onclick=pkClose;
 $('#pk').onclick=e=>{if(e.target.id=='pk')return pkClose();const b=e.target.closest('[data-k]');if(!b)return;const k=b.dataset.k;
@@ -146,14 +198,14 @@ const NEUTRAL=[
  [/\b(?:bikini|swimsuit|swimwear)\b/gi,'swimwear fashion catalog piece'],[/\b(?:lingerie|underwear|bra and panties)\b/gi,'loungewear catalog set'],
  [/\b(?:nude|naked|topless|cleavage|bust|busty)\b/gi,''],[/\bsee-?through\b/gi,'sheer-panel'],[/\blow-?cut\b/gi,'V-neck'],
 ];
-const FRAME={en:'Professional e-commerce fashion try-on photo for a clothing catalog. The subject is an adult, fully clothed in exactly the reference garments (same design, color and cut, nothing added or removed), keeping the same identity, in a natural, relaxed, non-suggestive pose, in a tasteful studio or lifestyle setting.',
+const FRAME={ja:'衣料品の通販カタログ用に、プロの試着写真を撮る。成人のモデルが参照画像と同じデザイン、色、裁断の衣服を着用し、衣服を足したり取り除いたりしない。本人の顔立ちを保ち、落ち着いたスタジオや日常の場面で、自然でリラックスしたポーズを取る。',en:'Professional e-commerce fashion try-on photo for a clothing catalog. The subject is an adult, fully clothed in exactly the reference garments (same design, color and cut, nothing added or removed), keeping the same identity, in a natural, relaxed, non-suggestive pose, in a tasteful studio or lifestyle setting.',
  zh:'服装电商的专业试穿照片，用于商品目录。人物是成年人，完整穿着参考图中的服装（款式、颜色、剪裁完全一致，不增不减），保持同一人的长相，姿势自然放松，场景为简洁的影棚或生活场景。'};
-const neutralOn=()=>LS('wbNeutral')!==false;$('#wbNeutral').checked=neutralOn();$('#wbNeutral').onchange=e=>{SV('wbNeutral',e.target.checked);toast(e.target.checked?'已开启减少误拦截':'已关闭减少误拦截，将按原提示词发送')};
+const neutralOn=()=>LS('wbNeutral')!==false;$('#wbNeutral').checked=neutralOn();$('#wbNeutral').onchange=e=>{SV('wbNeutral',e.target.checked);renderJapanesePreview();toast(e.target.checked?'已开启减少误拦截':'已关闭减少误拦截，将按原提示词发送')};
 const isAdultJob=set=>[...W.garments,...(set||[])].some(g=>g.kind=='lib'&&A.ITEMS[g.k]&&A.ITEMS[g.k].a);
-function neutralize(p){let t=p;for(const [a,b] of NEUTRAL)t=t.replace(a,b?'\x01'+b+'\x01':'\x02');
+function neutralize(p,lang){if(lang=='ja')return FRAME.ja+'\n'+p;let t=p;for(const [a,b] of NEUTRAL)t=t.replace(a,b?'\x01'+b+'\x01':'\x02');
  t=t.replace(/\b(with|and|in)\s+\x02\s+(?:and|with)\b/gi,'$1').replace(/\x01\x02*\x01/g,'、').replace(/\x01\s+\x01/g,' ').replace(/[\x01]/g,'').replace(/\s*\x02\s*/g,' ')
   .replace(/(^|[，,、；;：:。.\n])\s*(?:and|with|,)?\s*(?=[，,、；;。.\n]|$)/g,'$1').replace(/([，、；])[，、；]+/g,'$1').replace(/([,;])\s*[,;]+/g,'$1').replace(/[ \t]{2,}/g,' ').replace(/\s+([,.;，。；、])/g,'$1').replace(/^[，,、]\s*|[，,、]\s*$/gm,'').replace(/[,，、]\s*([.。;；])/g,'$1');
- const zh=/[\u4e00-\u9fa5]/.test(t.slice(0,40))&&W.pl!='en';return FRAME[zh?'zh':'en']+'\n'+t}
+ return FRAME[lang]+'\n'+t}
 // 表示文言の更新と入力の初期化を分け、言語変更時は編集中の値を保持します。
 const cfgLink=(url,label)=>`<a href="${url}" target="_blank" rel="noopener">${esc(label)}</a>`;
 function cfgLabels(prov){
@@ -263,12 +315,18 @@ function busy(on){
 }
 async function run(){if(!cfg.key){toast('请先配置你的 API');return cfgOpen()}if(!isGen()&&!hasPerson())return toast('请先上传人物照片');if(!W.garments.length)return toast('请先选择服装');
  const ac=new AbortController();W.busy=ac;$('#wbErr').hidden=true;$('#wbWarn').hidden=true;
- const n=+$('#wbN').value||1,sets=W.poses.length>1&&W.bm=='each'?W.poses.map(p=>[p]):[W.poses];const jobs=[];sets.forEach(s=>{for(let i=0;i<n;i++)jobs.push(s)});
+ // 非同期の画像読み込みが始まる前に、表示中の送信言語と本文を画像ごとに確定します。
+ const n=+$('#wbN').value||1,jobs=[],pl=W.pl,edited=W.dirty?$('#wbPrompt').value.trim():'';
+ for(const set of poseSets()){
+  const prompt0=edited||compose(set,pl),soft=neutralOn()&&!isAdultJob(set);
+  const prompt=soft?neutralize(prompt0,pl):prompt0;
+  for(let i=0;i<n;i++)jobs.push({set,prompt0,soft,prompt});
+ }
  done=0;total=jobs.length;busy(true);stage('正在准备素材…');const errs=[],warns=new Set(),got=[];
  try{const pb=W.persons.map(p=>p.blob),gb=await Promise.all(W.garments.map(assetBlob)),cache=new Map();const poseB=async p=>{const key=p.k+':'+p.ai;if(!cache.has(key))cache.set(key,assetBlob(p));return cache.get(key)};
-  const custom=W.dirty?$('#wbPrompt').value.trim():null;stage(total>1?'模型正在绘制… 共 {count} 张':'模型正在绘制…',{count:total});
-  let q=0;const worker=async()=>{while(q<jobs.length&&!ac.signal.aborted){const set=jobs[q++];try{const imgs=[...pb,...gb,...await Promise.all(set.map(poseB))];const prompt0=custom&&sets.length==1?custom:compose(set),soft=neutralOn()&&!isAdultJob(set),prompt=soft?neutralize(prompt0):prompt0;W.lastSent=prompt;
-    const jc=new AbortController(),onA=()=>jc.abort();ac.signal.addEventListener('abort',onA);let tmo=false;const tm=setTimeout(()=>{tmo=true;jc.abort()},window.__TMO||180000);let r;try{r=await genOnce(imgs,prompt,jc.signal)}catch(x){x.sent=prompt;if(tmo&&!ac.signal.aborted){const y=Error('timeout');y.ui=()=>t('等了 3 分钟还没有返回。服务商可能正忙，稍后点「重试」。');throw y}throw x}finally{clearTimeout(tm);ac.signal.removeEventListener('abort',onA)}if(r.warn)warns.add(r.warn);const rec={t:Date.now()+Math.random(),prov:cfg.prov,model:modelOf(),prompt,orig:soft?prompt0:null,neutral:soft,mode:W.mode,label:set.map(p=>poseDesc(p,false).split('（')[0]).join(' / ')||'',poseNames:set.map(p=>A.ITEMS[p.k]).filter(Boolean).map(it=>({zh:it.zh,en:it.en,ja:it.ja})),before:pb[0]||null,after:r.blob};got.push(rec);await save(rec);W.results=got.slice();show(got.length-1)}
+  stage(total>1?'模型正在绘制… 共 {count} 张':'模型正在绘制…',{count:total});
+  let q=0;const worker=async()=>{while(q<jobs.length&&!ac.signal.aborted){const {set,prompt0,soft,prompt}=jobs[q++];try{const imgs=[...pb,...gb,...await Promise.all(set.map(poseB))];W.lastSent=prompt;
+    const jc=new AbortController(),onA=()=>jc.abort();ac.signal.addEventListener('abort',onA);let tmo=false;const tm=setTimeout(()=>{tmo=true;jc.abort()},window.__TMO||180000);let r;try{r=await genOnce(imgs,prompt,jc.signal)}catch(x){x.sent=prompt;if(tmo&&!ac.signal.aborted){const y=Error('timeout');y.ui=()=>t('等了 3 分钟还没有返回。服务商可能正忙，稍后点「重试」。');throw y}throw x}finally{clearTimeout(tm);ac.signal.removeEventListener('abort',onA)}if(r.warn)warns.add(r.warn);const rec={t:Date.now()+Math.random(),prov:cfg.prov,model:modelOf(),prompt,orig:soft?prompt0:null,neutral:soft,mode:W.mode,label:set.map(p=>poseDesc(p,'zh').split('（')[0]).join(' / ')||'',poseNames:set.map(p=>A.ITEMS[p.k]).filter(Boolean).map(it=>({zh:it.zh,en:it.titleEn,ja:it.titleJa})),before:pb[0]||null,after:r.blob};got.push(rec);await save(rec);W.results=got.slice();show(got.length-1)}
    catch(e){if(e.name=='AbortError')throw e;errs.push(e)}finally{done++}}};
   await Promise.all(Array.from({length:Math.min(2,jobs.length)},worker));
   if(got.length){toast(got.length>1?'完成 {count} 张':'生成完成',null,{count:got.length});hist()}if(errs.length){const e=errs.find(x=>x.safe)||errs[0];errBox(e,got.length?errs.length:0)}
