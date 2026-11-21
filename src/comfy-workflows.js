@@ -43,8 +43,8 @@
       return profile(item);
     });
     const ids = new Set(workflows.map(item => item.id));
-    if (ids.size !== workflows.length ||
-      (ids.size ? !ids.has(value.activeId) : value.activeId !== null)) {
+    // 最初の登録を保存しても、「使う」を押すまでは使用中の ID は空です。
+    if (ids.size !== workflows.length || (value.activeId !== null && !ids.has(value.activeId))) {
       throw error('invalidWorkflow');
     }
     return {...state, activeId: value.activeId, workflows};
@@ -82,7 +82,8 @@
     }
     const updated = profile({id, name, fileName, workflow, mapping});
     workflows[index < 0 ? workflows.length : index] = updated;
-    return persist({...state, base: nextBase, activeId: id, workflows});
+    // 編集中の登録と、スタジオで使っている登録を別々に扱います。
+    return {state: persist({...state, base: nextBase, workflows}), profile: updated};
   }
 
   function select(state, id) {

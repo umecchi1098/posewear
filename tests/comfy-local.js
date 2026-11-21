@@ -123,6 +123,8 @@ async function main() {
     await page.locator('#cfComfyWorkflow').setInputFiles({
       name: sampleName, mimeType: 'application/json', buffer: await fs.readFile(workflowPath)
     });
+    await page.locator('#cfComfyName').filter({ hasText: sampleName }).waitFor();
+    assert.equal(await page.locator('#cfComfyName').innerText(), sampleName);
     await page.locator('#cfComfyPerson').selectOption('1');
     await page.locator('#cfComfyGarment').selectOption('1');
     assert.equal(await page.locator('#cfComfyOutput').inputValue(), '14');
@@ -132,11 +134,34 @@ async function main() {
 
     await page.locator('#cfComfyGarment').selectOption('2');
     await page.locator('#cfComfySave').click();
-    await page.locator('#cfComfyX').click();
+    assert.ok(await page.locator('#comfyManager').isVisible());
+    const readSaved = () => page.evaluate(() => ({
+      settings: JSON.parse(localStorage.getItem('wbComfy')),
+      provider: JSON.parse(localStorage.getItem('wbCfg')).prov
+    }));
+    const initial = await readSaved();
+    assert.equal(initial.settings.workflows.length, 1);
+    assert.equal(initial.settings.activeId, null);
+    assert.equal(initial.provider, 'openai');
+    const legacySampleId = await page.inputValue('#cfComfySaved');
+    assert.equal(legacySampleId, initial.settings.workflows[0].id);
+
+    // 未保存の変更があれば、「使う」では確定せず、管理画面で保存を案内します。
+    await page.fill('#cfComfyProfileName', '未保存の名前');
+    await page.click('#cfComfyUse');
+    assert.ok(await page.locator('#comfyManager').isVisible());
+    assert.equal(await page.locator('#cfComfyMsg').innerText(), '変更を先に保存してください');
+    assert.deepEqual(await readSaved(), initial);
+    await page.fill('#cfComfyProfileName', initial.settings.workflows[0].name);
+    await page.click('#cfComfyUse');
     await page.locator('#comfyManager').waitFor({ state: 'hidden' });
+    assert.equal((await readSaved()).settings.activeId, legacySampleId);
+    assert.equal((await readSaved()).provider, 'comfy');
+
     await page.reload();
     await page.locator('#wbCfg').click();
     assert.equal(await page.locator('#cfComfyBase').inputValue(), endpoint);
+    assert.equal(await page.locator('#cfComfyName').innerText(), sampleName);
     assert.equal(await page.locator('#cfComfyPerson').inputValue(), '1');
     assert.equal(await page.locator('#cfComfyGarment').inputValue(), '2');
     assert.equal(await page.locator('#cfComfyOutput').inputValue(), '14');
@@ -197,6 +222,7 @@ async function main() {
     await page.fill('#cfComfyProfileName', 'Qwen・PEあり');
     await page.click('#cfComfySave');
     const enhancedId = await page.inputValue('#cfComfySaved');
+    assert.equal((await readSaved()).settings.activeId, legacySampleId);
 
     // PEなしも別名で登録し、管理画面からPEありを選び直して生成します。
     await page.click('#cfComfyNew');
@@ -212,9 +238,28 @@ async function main() {
     await page.click('#cfComfySave');
     const directId = await page.inputValue('#cfComfySaved');
     assert.notEqual(enhancedId, directId);
+    assert.ok(await page.locator('#comfyManager').isVisible());
+    assert.equal((await readSaved()).settings.activeId, legacySampleId);
     await page.selectOption('#cfComfySaved', enhancedId);
-    await page.click('#cfComfySave');
-    await page.click('#cfComfyX');
+    assert.equal((await readSaved()).settings.activeId, legacySampleId);
+    // 管理画面の3つのノード選択欄が、画面幅によらず同じ列に並ぶことを確認します。
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({width, height: 900});
+      const boxes = [];
+      for (const role of ['Person', 'Garment', 'Pose']) {
+        boxes.push(await page.locator('#cfComfy' + role).boundingBox());
+      }
+      assert.ok(boxes.every(Boolean), `すべてのノード選択欄が表示されます (幅 ${width})`);
+      assert.ok(boxes.every(box => Math.abs(box.x - boxes[0].x) < 1),
+        `ノード選択欄の左端が揃います (幅 ${width})`);
+      assert.ok(boxes[0].y + boxes[0].height <= boxes[1].y &&
+        boxes[1].y + boxes[1].height <= boxes[2].y, `ノード選択欄が縦に並びます (幅 ${width})`);
+    }
+    await page.setViewportSize({width: 1280, height: 900});
+    await page.click('#cfComfyUse');
+    await page.locator('#comfyManager').waitFor({ state: 'hidden' });
+    assert.equal((await readSaved()).settings.activeId, enhancedId);
+    assert.equal(await page.inputValue('#wbWorkflow'), enhancedId);
     await page.setInputFiles('#wbFile', path.join(fixtures, 'person.png'));
     await page.setInputFiles('#wbGFile', path.join(fixtures, 'mk2.png'));
     await page.locator('.step[data-s="3"] .sh [data-pick="pose"]').click();

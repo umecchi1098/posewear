@@ -131,6 +131,10 @@ function render(localeOnly=false){
  if(local){
   const picker=$('#wbWorkflow');
   picker.replaceChildren(...comfyState.workflows.map(profile=>new Option(profile.name,profile.id)));
+  if(!comfy.id&&comfyState.workflows.length){
+   const placeholder=new Option(t('选择已注册的工作流'),'');
+   placeholder.disabled=true;picker.prepend(placeholder);
+  }
   picker.value=comfy.id||'';picker.disabled=!!W.busy;
   $('#wbWorkflowWrap').hidden=!comfyState.workflows.length;
  }
@@ -269,7 +273,8 @@ const COMFY_BINDINGS=[
 ];
 let comfyDraft, configRevision=0;
 function showComfyWorkflow(suggest=false){
- $('#cfComfyName').textContent=comfyDraft.fileName;
+ // 保存済みの JSON を開いたときも、登録したファイル名をボタンの隣に表示します。
+ $('#cfComfyName').textContent=comfyDraft.fileName||t('尚未选择文件');
  $('#cfComfyBindings').hidden=!comfyDraft.workflow;
  const nodes=Object.entries(comfyDraft.workflow||{});
  for(const [key,selector,required] of COMFY_BINDINGS){
@@ -348,7 +353,7 @@ const cloudCfgOpen=()=>{configRevision++;cfgFill();$('#cfg').hidden=false;docume
 const cfgClose=()=>{configRevision++;$('#cfg').hidden=true;document.body.style.overflow=''};
 const comfyOpen=()=>{
  $('#comfyManager').hidden=false;document.body.style.overflow='hidden';
- $('#cfComfyBase').value=comfy.base;editComfy(comfy.id?comfy:null);$('#cfComfyX').focus();
+ $('#cfComfyBase').value=comfy.base;editComfy(comfy.id?comfy:comfyState.workflows[0]);$('#cfComfyX').focus();
 };
 const comfyClose=()=>{configRevision++;$('#comfyManager').hidden=true;document.body.style.overflow=''};
 const cfgOpen=()=>isComfy()?comfyOpen():cloudCfgOpen();
@@ -385,7 +390,7 @@ $('#cfComfyDelete').onclick=()=>{
  if(!comfyDraft.id||!confirm(t('删除工作流「{name}」？',{name:comfyDraft.name})))return;
  try{
   useComfyState(workflowStore.remove(comfyState,comfyDraft.id));
-  editComfy(comfy.id?comfy:null);render();msg('已删除工作流');
+  editComfy(comfy.id?comfy:comfyState.workflows[0]);render();msg('已删除工作流');
  }catch(error){msg(()=>comfySaveError(error),1)}
 };
 $('#wbWorkflow').onchange=e=>{
@@ -422,10 +427,24 @@ $('#cfComfySave').onclick=()=>{
  if(W.busy)return msg('请等待当前生成完成。',1);
  if(!comfyDraft.workflow)return msg('请选择 ComfyUI 试穿工作流。',1);
  try{
-  useComfyState(workflowStore.save(comfyState,readComfy()));
+  const saved=workflowStore.save(comfyState,readComfy());
+  useComfyState(saved.state);
+  $('#cfComfyBase').value=comfy.base;editComfy(saved.profile);
  }catch(error){return msg(()=>comfySaveError(error),1)}
- setComfyProvider();
- $('#cfComfyBase').value=comfy.base;editComfy(comfy);render();msg('已保存并选用工作流');
+ render();msg('已保存工作流');
+};
+$('#cfComfyUse').onclick=()=>{
+ if(W.busy)return msg('请等待当前生成完成。',1);
+ const draft=readComfy();
+ const saved=comfyState.workflows.find(profile=>profile.id===draft.id);
+ // 「使う」で編集中の内容が失われないよう、表示中の内容と保存した登録を照合します。
+ if(!saved||saved.workflow!==draft.workflow||saved.name!==draft.name||draft.base.trim()!==comfy.base||
+    COMFY_BINDINGS.some(([role])=>(saved.mapping[role]||'')!==draft.mapping[role])){
+  return msg('请先保存更改',1);
+ }
+ try{useComfyState(workflowStore.select(comfyState,saved.id))}
+ catch(error){return msg(()=>comfySaveError(error),1)}
+ setComfyProvider();render();comfyClose();$('#wbWorkflow').focus();
 };
 $('#cfSave').onclick=()=>{
  if(W.busy)return msg('请等待当前生成完成。',1);
@@ -787,6 +806,7 @@ addEventListener('uilocalechange',()=>{
   if(cfgMessage)$('#cfMsg').textContent=cfgMessage();
  }
  if(!$('#comfyManager').hidden){
+  $('#cfComfyName').textContent=comfyDraft.fileName||t('尚未选择文件');
   $('#cfComfySaved').options[0].textContent=t('选择已注册的工作流');
   for(const [,selector,required] of COMFY_BINDINGS){
    $(selector).options[0].textContent=t(required?'请选择节点':'不指定节点');

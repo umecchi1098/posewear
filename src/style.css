@@ -600,8 +600,17 @@ body:has(#cfg:not([hidden]),#comfyManager:not([hidden])) #toast{bottom:calc(84px
 .pbox > .seg { margin-bottom: 10px; }
 
 /* ComfyUI の登録とノード割り当てを専用パネルにまとめます。 */
-.comfy-workflows,.comfy-bindings{display:grid;gap:10px}
-.comfy-bindings{grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr))}
+.comfy-workflows,.comfy-bindings,.comfy-binding-column{display:grid;gap:10px}
+.comfy-bindings{grid-template-columns:repeat(2,minmax(0,1fr))}
+.comfy-binding-column{align-content:start}
+.comfy-binding-column select{min-width:0}
+.comfy-file{display:flex;align-items:center;gap:10px}
+.comfy-file-picker{position:relative;flex:none;cursor:pointer;border-radius:12px;background:var(--sf);color:var(--tx)}
+.comfy-file-picker:hover{background:var(--line)}
+/* ファイル入力の位置を隠しても、ラベルにフォーカスを表示します。 */
+.comfy-file-picker:has(:focus-visible){outline:2px solid var(--ac);outline-offset:2px}
+#cfComfyName{min-width:0;overflow-wrap:anywhere}
+@media (max-width:520px){.comfy-bindings{grid-template-columns:minmax(0,1fr)}}
 .comfy-samples{display:flex;flex-wrap:wrap;gap:8px 12px}
 #wbWorkflowControls{display:flex;align-items:end;gap:8px;flex-wrap:wrap}
 #wbWorkflowWrap{flex:1;min-width:0}
