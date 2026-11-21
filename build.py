@@ -1,7 +1,7 @@
 import json,os,shutil,subprocess,depthpack
 from costume_text import gen2
 import hashlib,re,html as H
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from PIL import Image
 # 素材目录：默认 ./assets-raw，可用环境变量 POSEWEAR_RAW 指定（见 scripts/fetch-assets.py）
 R=os.environ.get('POSEWEAR_RAW','assets-raw'); D='dist'
@@ -111,7 +111,11 @@ if os.path.exists(f'{AROOT}/p/t'):
     if f.endswith('.jpg'): os.remove(f'{AROOT}/p/t/{f}')
 if AHOST:
   open(f'{AD}/_headers','w').write('/*\n  Cache-Control: public, max-age=31536000, immutable\n  Access-Control-Allow-Origin: *\n/o/*\n  Content-Disposition: attachment\n')
-with ProcessPoolExecutor() as ex: list(ex.map(cv,pd)); list(ex.map(cm,cd)); list(ex.map(ca,ad)); list(ex.map(cr,rd))
+# 各画像は独立しています。スレッドで処理すると、macOSでも子プロセスが
+# ビルドスクリプト全体を再実行せず、通常の python3 build.py で実行できます。
+with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as images:
+  for convert, rows in [(cv,pd), (cm,cd), (ca,ad), (cr,rd)]:
+    list(images.map(convert, rows))
 # 深度姿势：只解析素材包里的文本，热链包不复制图片（见 depthpack.py）
 _dc=depthpack.catalog(); DJ=J(_dc['payload']); DEPTH_ORIGINS=_dc['origins']
 for src,rel in _dc['copies']:

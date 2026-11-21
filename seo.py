@@ -60,7 +60,10 @@ def alts(path,en=True):
   if not en: return f'<link rel="canonical" href="{url("zh",path)}">'
   return f'<link rel="alternate" hreflang="zh-CN" href="{url("zh",path)}"><link rel="alternate" hreflang="en" href="{url("en",path)}"><link rel="alternate" hreflang="x-default" href="{url("zh",path)}">'
 def crumbs_ld(lang,cr,bid=None): return {"@type":"BreadcrumbList",**({"@id":bid} if bid else {}),"itemListElement":[{"@type":"ListItem","position":i+1,"name":n,**({"item":SITE+u} if u else {})} for i,(n,u) in enumerate(cr)]}
-def crumbs_html(cr): return '<nav class="bc" aria-label="breadcrumb"><ol>'+''.join(f'<li>{"<a href=\""+u+"\">"+E(n)+"</a>" if u else "<span aria-current=\"page\">"+E(n)+"</span>"}</li>' for n,u in cr)+'</ol></nav>'
+def crumbs_html(cr):
+  # リンク先がある項目と現在のページで出力するタグを切り替えます。
+  items = [f'<li><a href="{u}">{E(n)}</a></li>' if u else f'<li><span aria-current="page">{E(n)}</span></li>' for n,u in cr]
+  return '<nav class="bc" aria-label="breadcrumb"><ol>' + ''.join(items) + '</ol></nav>'
 def shell(lang,path,title,desc,body,ld,en=True,og=None,ogt='website'):
   P='/en' if lang=='en' else ''
   nav=(f'<nav><a href="{P}/pose/">{LAB[lang]["pose"]}</a><a href="{P}/costume/">{LAB[lang]["costume"]}</a><a href="{P}/anime/">{LAB[lang]["anime"]}</a><a href="{P}/portrait/">{LAB[lang]["portrait"]}</a><a href="https://github.com/atuizz/posewear" target="_blank" rel="noopener">GitHub</a>'+
@@ -229,7 +232,8 @@ HOME_COUNTS=[('288','pose'),('1439','ang'),('1407','cos'),('1320','ani'),('1499'
 for a,k in HOME_COUNTS:
   idx=idx.replace(f'<b data-n="{a}">0</b>',f'<b data-n="{HC[k]}" data-na="{HA[k]}">{HC[k]:,}</b>')
 def ssr(p):
-  t=p['zh'];a=p['angles'];return (f'<article class="card ssr"><div class="ph pose done"><a href="/pose/{p["id"]}/" class="ssl"><img class="ld" src="{TU(a[0]["t"])}" alt="{E(t)}" width="300" height="400" decoding="async"{"" if SP.index(p)<4 else " loading=\"lazy\""}></a><span class="badge">{p["no"]}</span></div>'
+  loading = '' if SP.index(p) < 4 else ' loading="lazy"'
+  t=p['zh'];a=p['angles'];return (f'<article class="card ssr"><div class="ph pose done"><a href="/pose/{p["id"]}/" class="ssl"><img class="ld" src="{TU(a[0]["t"])}" alt="{E(t)}" width="300" height="400" decoding="async"{loading}></a><span class="badge">{p["no"]}</span></div>'
     f'<div class="info"><h3><a href="/pose/{p["id"]}/">{E(t)}</a></h3><div class="sub">{E(p["cat"])} · {len(a)} 个角度</div><div class="tags"><span class="tag">{E(p["line"])}</span><span class="tag c">{E(p["cat"])}</span></div></div></article>')
 g=re.search(r'(<main id="grid"[^>]*>)(.*?)(</main>)',idx,re.S)
 idx=idx[:g.start(2)]+''.join(ssr(p) for p in SP[:12])+idx[g.end(2):]
