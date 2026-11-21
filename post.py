@@ -11,21 +11,24 @@ def put(name,data):
   b=data.encode() if isinstance(data,str) else data
   base,ext=name.rsplit('.',1);n=f'assets/{base}.{h8(b)}.{ext}';open(f'{D}/{n}','wb').write(b);A[name]=n;return n
 put('poses.json',PJ);put('costumes.json',CJ);put('anime.json',AJ);put('portraits.json',RJ);put('depths.json',DJ)
-for f in ['style.css','zip.js','extras.js','studio.js']: put(f,open(f'src/{f}','rb').read())
+# 翻訳辞書もキャッシュの版に含め、更新後に古い辞書が残らないようにします。
+ui_files=['ui.js','messages-common.js','messages-gallery.js','messages-studio.js']
+static_files=['style.css',*ui_files,'zip.js','extras.js','studio.js']
+for f in static_files: put(f,open(f'src/{f}','rb').read())
 app=open('src/app.js').read()
 if AH: app=app.replace("const AH='';",f"const AH='{AH}/';")
 app=app.replace("'poses.json'","'/"+A['poses.json']+"'").replace("'costumes.json'","'/"+A['costumes.json']+"'").replace("'anime.json'","'/"+A['anime.json']+"'").replace("'portraits.json'","'/"+A['portraits.json']+"'").replace("'depths.json'","'/"+A['depths.json']+"'")
 put('app.js',app)
 VER='posewear-v10-'+h8(''.join(A.values()))
 idx=open('src/index.html').read()
-for f in ['style.css','app.js','zip.js','extras.js','studio.js']:
+for f in [*static_files,'app.js']:
   idx=idx.replace(f'"{f}"',f'"/{A[f]}"')
 idx=idx.replace('href="poses.json"',f'href="/{A["poses.json"]}"')
 open(f'{D}/index.html','w').write(idx)
-for f in ['style.css','app.js','zip.js','extras.js','studio.js']:
+for f in [*static_files,'app.js']:
   if os.path.exists(f'{D}/{f}'): os.remove(f'{D}/{f}')
 sw=open('src/sw.js').read().replace("const V='posewear-v9'",f"const V='{VER}'")
-sw=sw.replace("['./','index.html','style.css','app.js','studio.js','extras.js','zip.js','favicon.svg']",json.dumps(['/','/favicon.svg']+['/'+A[f] for f in ['style.css','app.js','studio.js','extras.js','zip.js','poses.json','depths.json']]))
+sw=sw.replace('/* BUILD_PRECACHE */ []',json.dumps(['/','/favicon.svg']+['/'+A[f] for f in [*static_files,'app.js','poses.json','depths.json']]))
 open(f'{D}/sw.js','w').write(sw)
 import base64
 inl=re.findall(r'<script>(.*?)</script>',idx,re.S)

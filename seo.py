@@ -237,8 +237,8 @@ def ssr(p):
     f'<div class="info"><h3><a href="/pose/{p["id"]}/">{E(t)}</a></h3><div class="sub">{E(p["cat"])} · {len(a)} 个角度</div><div class="tags"><span class="tag">{E(p["line"])}</span><span class="tag c">{E(p["cat"])}</span></div></div></article>')
 g=re.search(r'(<main id="grid"[^>]*>)(.*?)(</main>)',idx,re.S)
 idx=idx[:g.start(2)]+''.join(ssr(p) for p in SP[:12])+idx[g.end(2):]
-nav='<nav class="seoc" aria-label="分类浏览"><div><h4>姿势分类</h4>'+''.join(f'<a href="/pose/{s}/">{z}</a>' for s,z,e,L in CATS['pose'])+'</div><div><h4>服装分类</h4>'+''.join(f'<a href="/costume/{s}/">{z}</a>' for s,z,e,L in CATS['costume'])+'<a href="/tag/">按单品和颜色</a></div><div><h4>人像</h4>'+''.join(f'<a href="/portrait/{s}/">{z}</a>' for s,z,e,L in CATS['portrait'])+'</div><div><h4>其他</h4><a href="/pose/">姿势图库</a><a href="/costume/">服装图库</a><a href="/anime/">动画服装图库</a><a href="/portrait/">人像图库</a><a href="/en/" hreflang="en" lang="en">English</a></div></nav>'
-idx=idx.replace('<footer class="foot">',nav+'<footer class="foot">',1)
+nav='<nav data-ui-section class="seoc" aria-label="分类浏览"><div><h4>姿势分类</h4>'+''.join(f'<a href="/pose/{s}/">{z}</a>' for s,z,e,L in CATS['pose'])+'</div><div><h4>服装分类</h4>'+''.join(f'<a href="/costume/{s}/">{z}</a>' for s,z,e,L in CATS['costume'])+'<a href="/tag/">按单品和颜色</a></div><div><h4>人像</h4>'+''.join(f'<a href="/portrait/{s}/">{z}</a>' for s,z,e,L in CATS['portrait'])+'</div><div><h4>其他</h4><a href="/pose/">姿势图库</a><a href="/costume/">服装图库</a><a href="/anime/">动画服装图库</a><a href="/portrait/">人像图库</a><a href="/en/" hreflang="en" lang="en">English</a></div></nav>'
+idx=idx.replace('<footer class="foot"',nav+'<footer class="foot"',1)
 open(f'{D}/index.html','w').write(idx)
 # ---- 站点地图 ----
 def smx(L,img=True):

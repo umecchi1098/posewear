@@ -1,4 +1,6 @@
 'use strict';
+UI.start();
+const tr=UI.t;
 let Q0='',QT='';try{const u=new URLSearchParams(location.search);Q0=(u.get('q')||'').slice(0,60);QT=u.get('t')||''}catch(e){}
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s),LS=k=>{try{return JSON.parse(localStorage[k]||'null')}catch(e){return null}},SV=(k,v)=>{try{localStorage[k]=JSON.stringify(v)}catch(e){}};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -94,14 +96,19 @@ $('#rand').onclick=randPick;
 // 语言
 function setLang(l,quiet){st.lang=l;SV('lang',l);document.documentElement.dataset.lang=l;$$('button[data-lang]').forEach(b=>b.classList.toggle('on',b.dataset.lang==l));grid.querySelectorAll('.card').forEach(c=>{const it=ITEMS[c.dataset.k];if(it)c.querySelector('.sub').textContent=subtitle(it)});if(!quiet)toast(l=='zh'?'描述语言：中文':'描述语言：英文提示词')}
 $$('button[data-lang]').forEach(b=>b.onclick=()=>setLang(b.dataset.lang));
+// タブ名と検索欄は、現在の言語とタブの両方から表示を決める。
+function drawHeader(){
+ if(st.tab)document.title=tr('{tab} · 衣姿 PoseWear',{tab:tr(TNAME[st.tab])});
+ $('#q').placeholder=tr(st.tab=='depth'?'搜姿势名、系列、分类':innerWidth<=760?'搜索':'搜姿势、颜色、单品');
+}
 // 标签页
 function moveInd(){const b=$('.tabs button.on'),ind=$('.ind');if(!b)return;ind.style.width=b.offsetWidth+'px';ind.style.transform=`translateX(${b.offsetLeft}px)`}
-async function setTab(t,openId){$('#porNote').hidden=t!='portrait';$('#depthNote').hidden=t!='depth';document.body.classList.toggle('depth',t=='depth');if(t=='studio'){st.tab=t;$$('.tabs button').forEach(b=>{b.classList.toggle('on',b.dataset.tab==t);b.setAttribute('aria-selected',b.dataset.tab==t)});moveInd();document.title='试穿 · 衣姿 PoseWear';history.replaceState(null,'','#studio');document.body.classList.add('studio');$('#studio').hidden=false;$('#tray').hidden=true;scrollTo({top:0});window.WB&&WB.show();return}
+async function setTab(t,openId){$('#porNote').hidden=t!='portrait';$('#depthNote').hidden=t!='depth';document.body.classList.toggle('depth',t=='depth');if(t=='studio'){st.tab=t;$$('.tabs button').forEach(b=>{b.classList.toggle('on',b.dataset.tab==t);b.setAttribute('aria-selected',b.dataset.tab==t)});moveInd();drawHeader();history.replaceState(null,'','#studio');document.body.classList.add('studio');$('#studio').hidden=false;$('#tray').hidden=true;scrollTo({top:0});window.WB&&WB.show();return}
  if(document.body.classList.contains('studio')){document.body.classList.remove('studio');$('#studio').hidden=true;tray()}
  const changed=st.tab!=t;st.tab=t;if(changed)grid.classList.add('gbusy');st.f={};st.q='';$('#q').value='';$('#qx').hidden=true;
  $$('.tabs button').forEach(b=>{b.classList.toggle('on',b.dataset.tab==t);b.setAttribute('aria-selected',b.dataset.tab==t)});moveInd();
- document.title=TNAME[t]+' · 衣姿 PoseWear';if(!openId)history.replaceState(null,'','#'+t);
- $('#rand').hidden=t=='fav'||t=='recent';$('#favTools').hidden=t!='fav';$('#clrRec').hidden=t!='recent';$('#sort').hidden=t=='recent';$('#porNote').hidden=t!='portrait';$('#depthNote').hidden=t!='depth';$('#q').placeholder=t=='depth'?'搜姿势名、系列、分类':(innerWidth<=760?'搜索':'搜姿势、颜色、单品');$('#sort option[value=rank]').hidden=t!='portrait';if(t!='portrait'&&st.sort=='rank'){st.sort='def';$('#sort').value='def'}
+ drawHeader();if(!openId)history.replaceState(null,'','#'+t);
+ $('#rand').hidden=t=='fav'||t=='recent';$('#favTools').hidden=t!='fav';$('#clrRec').hidden=t!='recent';$('#sort').hidden=t=='recent';$('#porNote').hidden=t!='portrait';$('#depthNote').hidden=t!='depth';$('#sort option[value=rank]').hidden=t!='portrait';if(t!='portrait'&&st.sort=='rank'){st.sort='def';$('#sort').value='def'}
  document.body.classList.toggle('compact',t=='fav'||t=='recent');
  if((!DATA[t]&&!(t=='pose'&&grid.querySelector('.ssr')))||t=='fav'||t=='recent'){grid.innerHTML='<div class="skel"></div>'.repeat(10);$('#empty').hidden=true}
  try{if(t=='fav')await needKeys([...st.fav]);else if(t=='recent')await needKeys(st.rec);else await load(t)}catch(e){grid.innerHTML='';$('#empty').hidden=false;$('#emptyT').textContent='数据加载失败';$('#emptyP').textContent='请检查网络后刷新页面重试';$('#sugg').innerHTML='';$('#reset').hidden=true;$('#empty .emo').innerHTML=EI.q;delete LOAD[t];grid.classList.remove('gbusy');$('#emptyGo').innerHTML='<button class="sm pri" id="retry">重新加载</button>';$('#retry').onclick=()=>{st.tab='';setTab(t)};return}
@@ -174,15 +181,19 @@ function openById(id){let i=st.list.findIndex(x=>x.id==id);if(i>=0)return lbOpen
  if(!ok(it))return ageAsk(()=>openById(id));st.f={};st.q='';$('#q').value='';drawFilters();apply();i=st.list.findIndex(x=>x.id==id);if(i>=0)lbOpen(i)}
 function route(){const [t,id]=location.hash.slice(1).split('/');const tab=TABS.includes(t)?t:'pose';if(!id&&tab==st.tab&&st.list.length)return;if(tab!=st.tab||!st.list.length||!id)setTab(tab,id&&decodeURIComponent(id));else openById(decodeURIComponent(id))}
 // 成人内容开关
-function ageSet(on,anim){st.adult=on;SV('adult',on);if(on)SV('ageOk',true);document.body.classList.toggle('adult',on);$('#adultSw').setAttribute('aria-checked',on);$('#adultSw').title=on?'成人向内容已显示，点击关闭':'成人向内容已隐藏，点击打开';counts();countUp();if(st.tab&&st.tab!='studio'&&st.tab!=''){const f=()=>{drawFilters();apply()};anim?viewT(f):f()}window.WB&&WB.show&&st.tab=='studio'&&WB.show()}
-let ageCb=null;function ageAsk(cb){ageCb=cb||null;const seen=LS('ageOk');$('#ageT').textContent=cb?'这是成人向内容':'显示成人向内容？';$('#ageP').textContent=(cb?'要查看它，需要打开顶部的「18+」开关。':'包括双人互动、性感类姿势、深度姿势里的双人图，以及内衣、性感类服装。')+(seen?'打开后随时可以再关上。':'仅适合已满 18 岁的用户。只需确认一次，之后用顶部开关随时打开或关闭。');$('#ageY').textContent=seen?'打开 18+ 开关':'我已满 18 岁，打开';$('#ageBox').hidden=false;setTimeout(()=>$('#ageY').focus(),30)}
+function ageSet(on,anim){st.adult=on;SV('adult',on);if(on)SV('ageOk',true);document.body.classList.toggle('adult',on);$('#adultSw').setAttribute('aria-checked',on);drawAgeSwitch();counts();countUp();if(st.tab&&st.tab!='studio'&&st.tab!=''){const f=()=>{drawFilters();apply()};anim?viewT(f):f()}window.WB&&WB.show&&st.tab=='studio'&&WB.show()}
+function drawAgeSwitch(){$('#adultSw').title=tr(st.adult?'成人向内容已显示，点击关闭':'成人向内容已隐藏，点击打开')}
+let ageCb=null;
+function drawAgeDialog(){const seen=LS('ageOk');$('#ageT').textContent=tr(ageCb?'这是成人向内容':'显示成人向内容？');$('#ageP').textContent=[tr(ageCb?'要查看它，需要打开顶部的「18+」开关。':'包括双人互动、性感类姿势、深度姿势里的双人图，以及内衣、性感类服装。'),tr(seen?'打开后随时可以再关上。':'仅适合已满 18 岁的用户。只需确认一次，之后用顶部开关随时打开或关闭。')].join(UI.locale=='en'?' ':'');$('#ageY').textContent=tr(seen?'打开 18+ 开关':'我已满 18 岁，打开')}
+function ageAsk(cb){ageCb=cb||null;drawAgeDialog();$('#ageBox').hidden=false;setTimeout(()=>$('#ageY').focus(),30)}
 $('#adultSw').onclick=()=>{if(st.adult){ageSet(false,1);toast('已关闭成人向内容')}else if(LS('ageOk')){ageSet(true,1);toast('已显示成人向内容')}else ageAsk()};
 $('#ageY').onclick=()=>{$('#ageBox').hidden=true;ageSet(true,!ageCb);toast('已显示成人向内容，可用顶部开关关闭');const c=ageCb;ageCb=null;c&&c()};
 $('#ageN').onclick=$('#ageBox').onclick=e=>{if(e.target.id!='ageN'&&e.target.id!='ageBox')return;$('#ageBox').hidden=true;ageCb=null};
 document.addEventListener('click',e=>{const b=e.target.closest('[data-age]');if(!b)return;st.adult?(ageSet(false),toast('已隐藏成人内容')):ageAsk()});
 $('#privO').onclick=e=>{e.preventDefault();$('#privBox').hidden=false};$('#privBox').onclick=e=>{if(e.target.id=='privBox'||e.target.dataset.close!=null)$('#privBox').hidden=true};
 addEventListener('hashchange',()=>{const id=location.hash.split('/')[1];if(!$('#lb').hidden){if(id)return;lbPushed=false;lbClose();setTimeout(route,closing?280:0);return}route()});
-if(innerWidth<=760)$('#q').placeholder='搜索';setLang(st.lang,true);ageSet(st.adult);hdr();countUp();needKeys([...st.sel]).then(()=>tray()).catch(()=>{});st.tab='';if(Q0&&!location.hash)history.replaceState(null,'','?q='+encodeURIComponent(Q0)+'#'+(TABS.includes(QT)?QT:'costume'));route();
+addEventListener('uilocalechange',()=>{drawHeader();drawAgeSwitch();if(!$('#ageBox').hidden)drawAgeDialog();moveInd();hdr()});
+drawHeader();setLang(st.lang,true);ageSet(st.adult);hdr();countUp();needKeys([...st.sel]).then(()=>tray()).catch(()=>{});st.tab='';if(Q0&&!location.hash)history.replaceState(null,'','?q='+encodeURIComponent(Q0)+'#'+(TABS.includes(QT)?QT:'costume'));route();
 if('serviceWorker'in navigator&&location.protocol!='file:')addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 
 window.APP={ok,ageAsk,toggleFav,toggleSel,lbOpen,lbClose,apply,li:()=>li,load,ITEMS,DATA,thumb,big,ath,title,prompt,toast,esc,setTab,st,copy};

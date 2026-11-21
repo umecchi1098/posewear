@@ -535,3 +535,31 @@ button:active:not(:disabled){transform:scale(.97)}.tabs button:active,.chip:acti
 
 .ssr .ssl{display:block;height:100%}.ssr .ph{cursor:pointer}.ssr h3 a{color:inherit;text-decoration:none}
 .seoc{max-width:var(--w);margin:0 auto;padding:28px 24px 8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;border-top:1px solid var(--line);font-size:13px}.seoc h4{margin:0 0 8px;font-size:13px;color:var(--mu);font-weight:600}.seoc a{display:inline-block;margin:0 12px 6px 0;color:inherit;text-decoration:none}.seoc a:hover{text-decoration:underline}
+
+/* 選択肢は各言語の自称で常に表示し、細い画面ではタブだけを横にスクロールします。 */
+#uiLocale { padding: 6px 8px; max-width: 8em; }
+.top .search { min-width: 12rem; }
+.tabs { flex-shrink: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tabs button { flex-shrink: 0; }
+/* 長い英語のタブ名と検索欄が競合する幅では、ナビゲーションを独立した行にします。 */
+@media (min-width: 861px) and (max-width: 1440px) {
+  .top { display: grid; height: auto; grid-template-columns: auto 1fr auto; gap: 4px 20px; padding-block: 8px; }
+  .top .tabs { grid-column: 1 / -1; grid-row: 2; }
+  .top .tools { grid-column: 3; }
+}
+@media (max-width: 860px) {
+  .top .search { min-width: 0; }
+  .top .wm { display: none; }
+  #uiLocale { font-size: 13px; padding-inline: 5px; }
+  .tabs { flex-shrink: 0; }
+}
+
+/* スマートフォンでも、入力例と入力した検索語を読める横幅を確保します。 */
+@media (max-width: 540px) {
+  .top .tools { order: 1; margin-left: auto; }
+  .top .search { order: 2; flex: 0 0 100%; }
+  .top .wm { display: flex; }
+  .top .wm b { display: none; }
+  #help { display: inline-grid; }
+  .top .tools > a.icon { display: none; }
+}
