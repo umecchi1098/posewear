@@ -95,8 +95,12 @@ for d in rd:
   pors.append(it)
 RJ=J(pors)
 if os.path.exists(f'{D}/data.js'): os.remove(f'{D}/data.js')
-for a,b in [('costume/thumbs','c/t'),('costume/img','c/i'),('anime/thumbs','a/t'),('anime/img','a/i')]:
-  shutil.copytree(f'{R}/{a}',f'{AROOT if b.endswith("/t") else D}/{b}',dirs_exist_ok=True)
+# 画像キャッシュに古い衣装が残っていても、今回のカタログに載っている画像だけを公開する。
+for library, prefix, rows in [('costume', 'c', cd), ('anime', 'a', ad)]:
+  for key, target in [('サムネ', f'{AROOT}/{prefix}/t'), ('画像', f'{D}/{prefix}/i')]:
+    os.makedirs(target, exist_ok=True)
+    for row in rows:
+      shutil.copy2(os.path.join(R, library, row[key]), target)
 os.makedirs(f'{D}/p/i',exist_ok=True)
 def cv(d):
   t=f"{AROOT}/p/t/{d['id']}.webp"

@@ -26,7 +26,8 @@ if AH: app=app.replace("const AH='';",f"const AH='{AH}/';")
 app=app.replace("'poses.json'","'/"+A['poses.json']+"'").replace("'costumes.json'","'/"+A['costumes.json']+"'").replace("'anime.json'","'/"+A['anime.json']+"'").replace("'portraits.json'","'/"+A['portraits.json']+"'").replace("'depths.json'","'/"+A['depths.json']+"'")
 put('app.js',app)
 VER='posewear-v10-'+h8(''.join(A.values()))
-idx=open('src/index.html').read()
+# 共有プレビューや検索結果にも、今回公開するフォーク自身のURLを使います。
+idx=open('src/index.html').read().replace('__POSEWEAR_SITE__', H.escape(SITE, quote=True))
 for f in [*static_files,'app.js']:
   idx=idx.replace(f'"{f}"',f'"/{A[f]}"')
 idx=idx.replace('href="poses.json"',f'href="/{A["poses.json"]}"')

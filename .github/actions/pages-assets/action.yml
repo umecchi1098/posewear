@@ -1,0 +1,42 @@
+name: Pages用の素材を用意
+description: 最新のカタログにある画像だけを、ライブラリ単位のキャッシュと提供元から揃えます。
+inputs:
+  library:
+    description: pose / costume / anime / portrait
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: 最新の素材一覧を取得
+      shell: bash
+      env:
+        LIBRARY: ${{ inputs.library }}
+      run: python scripts/fetch-assets.py --meta-only "$LIBRARY"
+
+    # メタデータは常に最新を使う。キャッシュは画像だけなので、新しい一覧を上書きしない。
+    - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      id: cache
+      with:
+        path: |
+          assets-raw/${{ inputs.library }}/img
+          assets-raw/${{ inputs.library }}/thumbs
+          assets-raw/${{ inputs.library }}/png
+        key: pages-images-v1-${{ inputs.library }}-${{ hashFiles(format('assets-raw/{0}/data.json', inputs.library), format('assets-raw/{0}/images.js', inputs.library)) }}
+        restore-keys: |
+          pages-images-v1-${{ inputs.library }}-
+
+    - name: 不足分を取得して全画像を確認
+      shell: bash
+      env:
+        LIBRARY: ${{ inputs.library }}
+      run: python scripts/fetch-assets.py --images-only "$LIBRARY"
+
+    # 取得に成功したライブラリから保存し、後段が失敗しても次回利用できるようにする。
+    - uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      if: steps.cache.outputs.cache-hit != 'true'
+      with:
+        path: |
+          assets-raw/${{ inputs.library }}/img
+          assets-raw/${{ inputs.library }}/thumbs
+          assets-raw/${{ inputs.library }}/png
+        key: ${{ steps.cache.outputs.cache-primary-key }}

@@ -96,6 +96,8 @@ python3 -m http.server 8787 -d dist
 
 ## 部署
 
+此 fork 使用 GitHub Actions 自动发布 `dev` 分支。请参阅[Cloudflare Pages 初始设置（日文）](docs/pages-dev.md)。
+
 仓库不带素材，所以需要先在本地构建，再上传 `dist/` 到 Cloudflare Pages：
 
 ```bash

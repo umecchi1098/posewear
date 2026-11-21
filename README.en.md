@@ -75,6 +75,8 @@ Set `POSEWEAR_RAW` to use a different asset folder, and `POSEWEAR_SITE` to set y
 
 ## Deploy
 
+This fork publishes the `dev` branch through GitHub Actions. See the [Cloudflare Pages setup guide (Japanese)](docs/pages-dev.md).
+
 The repository ships without assets, so build locally first, then upload `dist/` to Cloudflare Pages:
 
 ```bash
