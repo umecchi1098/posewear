@@ -104,10 +104,10 @@ async function main() {
     await page.locator('label:has([name=prov][value=comfy])').click();
     assert.ok(await page.locator('#cfKey').isHidden());
     await page.locator('#cfComfyBase').fill(endpoint);
-    await page.locator('#cfTest').click();
-    await page.locator('#cfMsg.good, #cfMsg.bad').filter({ hasNotText: '接続中' }).waitFor();
+    await page.locator('#cfComfyTest').click();
+    await page.locator('#cfComfyMsg.good, #cfComfyMsg.bad').filter({ hasNotText: '接続中' }).waitFor();
     // 接続失敗時は、画面の理由とブラウザーが報告した通信エラーを表示します。
-    assert.equal(await page.locator('#cfMsg').innerText(), 'ComfyUI に接続できました。',
+    assert.equal(await page.locator('#cfComfyMsg').innerText(), 'ComfyUI に接続できました。',
       '接続テスト: ' + [...requestFailures, ...browserMessages].filter(message => message.includes(endpoint)).join(', ') +
       ' リクエスト: ' + requests.map(r => r.path + ' from ' + r.headers.origin).join(', '));
     assert.deepEqual(requests.map(r => r.path), ['/system_stats']);
@@ -126,20 +126,21 @@ async function main() {
     await page.locator('#cfComfyPerson').selectOption('1');
     await page.locator('#cfComfyGarment').selectOption('1');
     assert.equal(await page.locator('#cfComfyOutput').inputValue(), '14');
-    await page.locator('#cfSave').click();
+    await page.locator('#cfComfySave').click();
     await page.getByText('人物用と服装用に別々の LoadImage ノードを選び、SaveImage ノードを1つ選択してください。', { exact: true }).waitFor();
     assert.equal(requests.length, 1);
 
     await page.locator('#cfComfyGarment').selectOption('2');
-    await page.locator('#cfSave').click();
-    await page.locator('#cfg').waitFor({ state: 'hidden' });
+    await page.locator('#cfComfySave').click();
+    await page.locator('#cfComfyX').click();
+    await page.locator('#comfyManager').waitFor({ state: 'hidden' });
     await page.reload();
     await page.locator('#wbCfg').click();
     assert.equal(await page.locator('#cfComfyBase').inputValue(), endpoint);
     assert.equal(await page.locator('#cfComfyPerson').inputValue(), '1');
     assert.equal(await page.locator('#cfComfyGarment').inputValue(), '2');
     assert.equal(await page.locator('#cfComfyOutput').inputValue(), '14');
-    await page.locator('#cfgX').click();
+    await page.locator('#cfComfyX').click();
 
     await page.locator('#wbFile').setInputFiles(path.join(fixtures, 'person.png'));
     await page.locator('#wbGFile').setInputFiles(path.join(fixtures, 'mk2.png'));
@@ -173,14 +174,16 @@ async function main() {
     await page.reload();
     await page.locator('#wbHist button').click();
     await page.locator('#wbAfter').waitFor();
-    assert.match(await page.locator('#wbMeta').innerText(), /ComfyUI.*try-on-qwen-2509-api\.json/);
+    assert.match(await page.locator('#wbMeta').innerText(), /ComfyUI.*try-on-qwen-2509-api/);
     assert.ok(await page.locator('#wbSentD').isHidden());
     await page.locator('#wbCfg').click();
+    await page.locator('#cfComfyProviders').click();
     await page.locator('label:has([name=prov][value=openai])').click();
     assert.equal(await page.locator('#cfKey').inputValue(), cloudKey);
     assert.equal(await page.locator('#cfModel').inputValue(), 'gpt-image-1-mini');
     // 同じ人物と衣装でポーズを2つ選び、各2枚の送信内容と履歴を確認します。
     await page.locator('label:has([name=prov][value=comfy])').click();
+    await page.click('#cfComfyNew');
     const poseFile = 'posewear-qwen21-pose-api.json';
     const poseWorkflow = await page.request.get(new URL('/workflows/' + poseFile, site).href);
     assert.equal(poseWorkflow.status(), 200);
@@ -191,7 +194,27 @@ async function main() {
     for (const [role, id] of Object.entries({
       Person:'470', Garment:'475', Pose:'490', Output:'461', Prompt:'488', Aspect:'13', Seed:'459:458'
     })) assert.equal(await page.inputValue('#cfComfy' + role), id);
-    await page.click('#cfSave');
+    await page.fill('#cfComfyProfileName', 'Qwen・PEあり');
+    await page.click('#cfComfySave');
+    const enhancedId = await page.inputValue('#cfComfySaved');
+
+    // PEなしも別名で登録し、管理画面からPEありを選び直して生成します。
+    await page.click('#cfComfyNew');
+    const noPeFile = 'posewear-qwen21-pose-no-pe-api.json';
+    const [noPeDownload] = await Promise.all([
+      page.waitForEvent('download'), page.click('a[download][href$="' + noPeFile + '"]')
+    ]);
+    await page.setInputFiles('#cfComfyWorkflow', {
+      name: noPeFile, mimeType: 'application/json', buffer: await fs.readFile(await noPeDownload.path())
+    });
+    await page.waitForFunction(() => document.querySelector('#cfComfyPose').value === '490');
+    await page.fill('#cfComfyProfileName', 'Qwen・PEなし');
+    await page.click('#cfComfySave');
+    const directId = await page.inputValue('#cfComfySaved');
+    assert.notEqual(enhancedId, directId);
+    await page.selectOption('#cfComfySaved', enhancedId);
+    await page.click('#cfComfySave');
+    await page.click('#cfComfyX');
     await page.setInputFiles('#wbFile', path.join(fixtures, 'person.png'));
     await page.setInputFiles('#wbGFile', path.join(fixtures, 'mk2.png'));
     await page.locator('.step[data-s="3"] .sh [data-pick="pose"]').click();
@@ -222,28 +245,91 @@ async function main() {
       assert.equal(graph['459:468'].inputs.switch, true);
       assert.match(graph['13'].inputs.aspect_ratio, /^2:3 /);
     }
+    // 素材や追加指示を入力したままPEを切り替え、次の送信で選んだグラフを確認します。
+    await page.click('#wbAdv summary');
+    await page.fill('#wbExtra', '白いバッグを持つ');
+    await page.selectOption('#wbWorkflow', directId);
+    assert.equal(await page.inputValue('#wbExtra'), '白いバッグを持つ');
+    assert.equal(await page.locator('#wbPersons img').count(), 1);
+    assert.equal(await page.locator('#wbG img').count(), 1);
+    assert.equal(await page.locator('#wbPo [data-ang]').count(), 2);
     // 生成した4枚がまとめて取得でき、他の試着履歴が ZIP に混ざらないことを確認します。
     const [zipDownload] = await Promise.all([page.waitForEvent('download'), page.click('#wbZip')]);
     const zip = await fs.readFile(await zipDownload.path());
     const endOfDirectory = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
     assert.ok(endOfDirectory >= 0);
     assert.equal(zip.readUInt16LE(endOfDirectory + 10), 4);
+    const beforeDirect = requests.length;
+    await page.selectOption('#wbN', '1');
+    await page.click('#wbGo');
+    await page.waitForFunction(() => document.querySelectorAll('#wbHist [data-t]').length === 7);
+    const directGraphs = requests.slice(beforeDirect).filter(r => r.path === '/prompt').map(r => JSON.parse(r.body).prompt);
+    assert.equal(directGraphs.length, 2);
+    for (const graph of directGraphs) {
+      assert.equal(graph['486'], undefined);
+      assert.deepEqual(graph['459:474'].inputs.prompt, ['488', 0]);
+      assert.deepEqual(graph['459:474'].inputs['images.image_3'], ['490', 0]);
+      assert.match(graph['488'].inputs.value, /白いバッグを持つ/);
+    }
     await page.reload();
-    await page.waitForFunction(() => document.querySelectorAll('#wbHist [data-t]').length === 5);
-    await page.locator('#wbHist [data-t]').first().click();
-    assert.match(await page.locator('#wbMeta').innerText(), /posewear-qwen21-pose-api/);
+    await page.waitForFunction(() => document.querySelectorAll('#wbHist [data-t]').length === 7);
+    await page.locator('#wbHist [data-t]').nth(2).click();
+    assert.match(await page.locator('#wbMeta').innerText(), /Qwen・PEあり/);
     // ポーズをすべて外しても同じ設定を使え、古い第3画像は再送されません。
     while (await page.locator('#wbPo [data-rm]').count()) await page.locator('#wbPo [data-rm]').first().click();
     await page.setInputFiles('#wbFile', path.join(fixtures, 'person.png'));
     await page.setInputFiles('#wbGFile', path.join(fixtures, 'mk2.png'));
     await page.selectOption('#wbN', '1');
     await page.click('#wbGo');
-    await page.waitForFunction(() => document.querySelectorAll('#wbHist [data-t]').length === 6);
+    await page.waitForFunction(() => document.querySelectorAll('#wbHist [data-t]').length === 8);
+    assert.equal(await page.inputValue('#wbWorkflow'), directId);
     const noPose = JSON.parse(requests.filter(r => r.path === '/prompt').at(-1).body).prompt;
     assert.equal(noPose['490'], undefined);
-    assert.equal(noPose['486'].inputs['images.image3'], undefined);
+    assert.equal(noPose['486'], undefined);
+    assert.deepEqual(noPose['459:474'].inputs.prompt, ['488', 0]);
     assert.equal(noPose['459:474'].inputs['images.image_3'], undefined);
-    assert.equal(poseUploads, 2);
+    assert.equal(poseUploads, 4);
+
+    // 名前を変更してから削除しても、生成時の名前を履歴から確認できます。
+    await page.click('#wbWorkflowManage');
+    await page.fill('#cfComfyProfileName', 'PEなし 改名');
+    await page.click('#cfComfySave');
+    assert.equal(await page.inputValue('#cfComfySaved'), directId);
+    const [backupFile] = await Promise.all([page.waitForEvent('download'), page.click('#cfComfyExport')]);
+    const backup = await fs.readFile(await backupFile.path(), 'utf8');
+    assert.ok(!backup.includes(cloudKey));
+    assert.equal(JSON.parse(backup).comfy.workflows.length, 3);
+    page.once('dialog', dialog => dialog.accept());
+    await page.click('#cfComfyDelete');
+    assert.notEqual(await page.inputValue('#cfComfySaved'), directId);
+    await page.click('#cfComfyX');
+    await page.locator('#wbHist [data-t]').first().click();
+    assert.match(await page.innerText('#wbMeta'), /Qwen・PEなし/);
+    await page.click('#wbWorkflowManage');
+    page.once('dialog', dialog => dialog.accept());
+    await page.setInputFiles('#cfImpF', {
+      name: 'settings.json', mimeType: 'application/json', buffer: Buffer.from(backup)
+    });
+    await page.waitForFunction(id => document.querySelector('#cfComfySaved').value === id, directId);
+    assert.equal(await page.inputValue('#cfComfyProfileName'), 'PEなし 改名');
+
+    // 以前の単一設定を持つブラウザーでも、再登録せず元の割り当てを使えます。
+    await page.evaluate(({base, workflow, name}) => {
+      localStorage.setItem('wbComfy', JSON.stringify({
+        base, workflow, name, mapping: {person: '1', garment: '2', output: '14'}
+      }));
+    }, {base: endpoint, workflow: sample, name: sampleName});
+    await page.reload();
+    await page.click('#wbWorkflowManage');
+    assert.equal(await page.textContent('#cfComfyName'), sampleName);
+    assert.equal(await page.inputValue('#cfComfyGarment'), '2');
+    await page.click('#cfComfySave');
+    assert.equal(await page.locator('#wbWorkflow option').count(), 1);
+    page.once('dialog', dialog => dialog.accept());
+    await page.click('#cfComfyDelete');
+    await page.click('#cfComfyX');
+    assert.ok(await page.locator('#wbWorkflowWrap').isHidden());
+    assert.ok(await page.locator('#wbWorkflowManage').isVisible());
     assert.deepEqual(proxyRequests, []);
     assert.deepEqual(errors, []);
     console.log('ComfyUI browser regression passed (local HTTP mock, CORS, workflow, history, key isolation).');

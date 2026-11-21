@@ -13,7 +13,12 @@ const PROV={openai:{name:'OpenAI',base:'https://api.openai.com/v1',model:'gpt-im
  custom:{name:'自定义中转',base:'',model:'gpt-image-1',models:['gpt-image-1','gpt-image-2','gemini-2.5-flash-image','flux-kontext-pro','qwen-image-edit','doubao-seedream-4-0-250828']}};
 const cfg=Object.assign({prov:'openai',base:'',key:'',model:'',field:'image[]',proto:'edits',proxy:false},LS('wbCfg')||{});
 // ローカル設定を分け、クラウドのキーや接続情報を ComfyUI に渡さないようにします。
-const comfy=Object.assign({base:PROV.comfy.base,workflow:null,mapping:{},name:''},LS('wbComfy'));
+const workflowStore=window.ComfyWorkflows;
+let comfyState=workflowStore.load(),comfy=workflowStore.active(comfyState);
+function useComfyState(next){
+ comfyState=next;
+ comfy=workflowStore.active(comfyState);
+}
 const isComfy=()=>cfg.prov=='comfy';
 const COMFY_LIMIT='ComfyUI 需要 1 张人物照和 1 张服装图。';
 const COMFY_POSE='请设置 ComfyUI 的姿势图片节点，或移除已选的姿势。';
@@ -122,6 +127,13 @@ function pickRow(a,type,i){const it=a.kind=='lib'&&A.ITEMS[a.k];if(a.kind=='lib'
  return`<div class="pick ${type}"><img src="${src}" alt="${esc(name)}"><div><b>${esc(name)}</b><small>${esc(sub)}</small></div>${type=='pose'&&it?`<select data-ang="${i}" aria-label="${esc(t('角度'))}">${it.angles.map((x,j)=>`<option value="${j}" ${j==(a.ai??it.ai)?'selected':''}>${esc(angleLabel(x))}</option>`).join('')}</select>`:''}<button class="rmx" data-rm="${type}" data-i="${i}" aria-label="${esc(t('移除'))}" title="${esc(t('移除'))}">×</button></div>`}
 function render(localeOnly=false){
  const local=isComfy(),G=isGen(),poseEnabled=canPickPose();
+ $('#wbWorkflowControls').hidden=!local;
+ if(local){
+  const picker=$('#wbWorkflow');
+  picker.replaceChildren(...comfyState.workflows.map(profile=>new Option(profile.name,profile.id)));
+  picker.value=comfy.id||'';picker.disabled=!!W.busy;
+  $('#wbWorkflowWrap').hidden=!comfyState.workflows.length;
+ }
  const promptEnabled=!local||!!comfy.mapping.prompt,aspectEnabled=!local||!!comfy.mapping.aspect;
  const countEnabled=!local||!!comfy.mapping.seed;
  // 未設定の入力は隠し、設定変更前に選んだポーズだけは削除できるようにします。
@@ -236,6 +248,7 @@ function neutralize(p,lang){if(lang=='ja')return FRAME.ja+'\n'+p;let t=p;for(con
 const COMFY_ERRORS={
  invalidBase:'请输入本机回环地址，例如 http://127.0.0.1:8188。',
  invalidWorkflow:'无法读取工作流。请在 ComfyUI 中以 API 格式导出 JSON。',
+ invalidWorkflowName:'请输入工作流名称。',
  invalidMapping:'请选择两个不同的 LoadImage 节点和一个 SaveImage 节点。',
  invalidPoseMapping:'姿势图片需要单独的 LoadImage 节点。',
  invalidImage:'无法读取试穿所需的图片。',
@@ -256,7 +269,8 @@ const COMFY_BINDINGS=[
 ];
 let comfyDraft, configRevision=0;
 function showComfyWorkflow(suggest=false){
- $('#cfComfyName').textContent=comfyDraft.name;
+ $('#cfComfyName').textContent=comfyDraft.fileName;
+ $('#cfComfyBindings').hidden=!comfyDraft.workflow;
  const nodes=Object.entries(comfyDraft.workflow||{});
  for(const [key,selector,required] of COMFY_BINDINGS){
   const select=$(selector);
@@ -279,28 +293,31 @@ function showComfyWorkflow(suggest=false){
 function readComfy(){
  return {
   ...comfyDraft,
-  base:window.ComfyUI.normalizeBase($('#cfComfyBase').value),
+  name:$('#cfComfyProfileName').value.trim(),
+  base:$('#cfComfyBase').value,
   mapping:Object.fromEntries(COMFY_BINDINGS.map(([key,selector])=>[key,$(selector).value]))
  };
 }
-function saveComfy(o){
- window.ComfyUI.validateMapping(o.workflow,o.mapping);
- // 容量不足を成功として扱わないよう、設定の保存エラーを呼び出し元へ返します。
- localStorage.setItem('wbComfy',JSON.stringify(o));
- Object.assign(comfy,o);
+function editComfy(profile){
+ // ファイルを読み込み中に選択を変えた場合は、古い読み込み結果を反映しません。
+ configRevision++;
+ comfyDraft=profile?{...profile}:{id:null,name:'',fileName:'',workflow:null,mapping:{}};
+ const picker=$('#cfComfySaved');
+ picker.replaceChildren(new Option(t('选择已注册的工作流'),''),...comfyState.workflows.map(item=>new Option(item.name,item.id)));
+ picker.options[0].disabled=true;picker.value=comfyDraft.id||'';
+ $('#cfComfySavedWrap').hidden=!comfyState.workflows.length;
+ $('#cfComfyDelete').hidden=!comfyDraft.id;
+ $('#cfComfyProfileName').value=comfyDraft.name;
+ $('#cfComfyWorkflow').value='';
+ showComfyWorkflow();
+ cfgMessage=null;$('#cfComfyMsg').textContent='';$('#cfComfyMsg').className='fine';
 }
 const cfgLink=(url,label)=>`<a href="${url}" target="_blank" rel="noopener">${esc(label)}</a>`;
 function cfgLabels(prov){
  const P=PROV[prov];
  const local=prov=='comfy';
- $('#cfComfy').hidden=!local;$('#cfCloud').hidden=local;$('#cfClr').hidden=local;
- if(local){
-  $('#cfHelp').textContent=t('先启动本机 ComfyUI，再导入 API 格式的试穿工作流。');
-  for(const [key,selector,required] of COMFY_BINDINGS){
-   $(selector).options[0].textContent=t(required?'请选择节点':'不指定节点');
-  }
-  return;
- }
+ $('#cfCloud').hidden=local;$('#cfCloudFooter').hidden=local;
+ if(local){$('#cfHelp').textContent='';return}
  $('#cfBase').placeholder=P.base||t('https://你的中转地址/v1');
  $('#cfKey').placeholder=prov=='gemini'?'AIza…':t('sk-… / 方舟 API Key');
  $('#cfEye').textContent=t($('#cfKey').type=='password'?'显示':'隐藏');
@@ -314,12 +331,10 @@ function cfgLabels(prov){
 }
 let cfgMessage;
 function cfgFill(){
- cloudDraft=null;selectedProvider=cfg.prov;
+
  $$('[name=prov]').forEach(r=>r.checked=r.value==cfg.prov);
  const cloud=cfg.prov=='comfy'?(cfg.cloudProv||'openai'):cfg.prov;
  const P=PROV[cloud];
- comfyDraft={...comfy};
- $('#cfComfyBase').value=comfy.base;$('#cfComfyWorkflow').value='';showComfyWorkflow();
  $('#cfKey').type='password';
  $('#cfBase').value=cfg.base;$('#cfKey').value=cfg.key;
  $('#cfModel').value=cfg.model;$('#cfModel').placeholder=P.model;
@@ -329,29 +344,57 @@ function cfgFill(){
  cfgLabels(cfg.prov);cfgMessage=null;$('#cfMsg').textContent='';$('#cfMsg').className='fine';
 }
 function cfgRead(){return{prov:($('[name=prov]:checked')||{}).value||'openai',base:$('#cfBase').value.trim(),key:$('#cfKey').value.trim(),model:$('#cfModel').value.trim(),field:$('#cfField').value,proto:$('#cfProto').value,proxy:$('#cfProxy').checked}}
-const cfgOpen=()=>{configRevision++;cfgFill();$('#cfg').hidden=false;document.body.style.overflow='hidden'},cfgClose=()=>{configRevision++;$('#cfg').hidden=true;document.body.style.overflow=''};
-$('#wbCfg').onclick=cfgOpen;$('#wbCfg2').onclick=cfgOpen;$('#wbOnbGo').onclick=cfgOpen;$('#cfgX').onclick=cfgClose;$('#cfg').addEventListener('click',e=>{if(e.target.id=='cfg')cfgClose()});
-let cloudDraft,selectedProvider=cfg.prov;
+const cloudCfgOpen=()=>{configRevision++;cfgFill();$('#cfg').hidden=false;document.body.style.overflow='hidden';$('#cfgX').focus()};
+const cfgClose=()=>{configRevision++;$('#cfg').hidden=true;document.body.style.overflow=''};
+const comfyOpen=()=>{
+ $('#comfyManager').hidden=false;document.body.style.overflow='hidden';
+ $('#cfComfyBase').value=comfy.base;editComfy(comfy.id?comfy:null);$('#cfComfyX').focus();
+};
+const comfyClose=()=>{configRevision++;$('#comfyManager').hidden=true;document.body.style.overflow=''};
+const cfgOpen=()=>isComfy()?comfyOpen():cloudCfgOpen();
+$('#wbCfg').onclick=cfgOpen;$('#wbCfg2').onclick=cfgOpen;$('#wbOnbGo').onclick=cfgOpen;
+$('#cfgX').onclick=cfgClose;$('#cfg').addEventListener('click',e=>{if(e.target.id=='cfg')cfgClose()});
+$('#wbWorkflowManage').onclick=comfyOpen;
+$('#cfComfyX').onclick=comfyClose;
+$('#comfyManager').addEventListener('click',e=>{if(e.target.id=='comfyManager')comfyClose()});
+$('#cfComfyProviders').onclick=()=>{comfyClose();cloudCfgOpen()};
+$('[name=prov][value=comfy]').onclick=()=>{cfgClose();comfyOpen()};
 $$('[name=prov]').forEach(r=>r.onchange=()=>{
+ if(r.value=='comfy')return;
  configRevision++;
- const prov=r.value,previous=selectedProvider;selectedProvider=prov;
- if(prov=='comfy'){
-  cloudDraft={...cfgRead(),prov:previous};
- }else{
-  const stored=cfg.prov=='comfy'?cfg.cloudProv||'openai':cfg.prov;
-  const P=PROV[prov];
-  $('#cfBase').value=prov==cloudDraft?.prov?cloudDraft.base:prov==stored?cfg.base:'';
-  $('#cfModel').value=prov==cloudDraft?.prov?cloudDraft.model:prov==stored?cfg.model:'';
-  $('#cfModel').placeholder=P.model;
-  $('#cfModels').replaceChildren(...P.models.map(m=>new Option(m,m)));
-  if(prov=='seedream')$('#cfProxy').checked=true;
- }
+ const prov=r.value,stored=isComfy()?cfg.cloudProv||'openai':cfg.prov;
+ const P=PROV[prov];
+ $('#cfBase').value=prov==stored?cfg.base:'';
+ $('#cfModel').value=prov==stored?cfg.model:'';
+ $('#cfModel').placeholder=P.model;
+ $('#cfModels').replaceChildren(...P.models.map(m=>new Option(m,m)));
+ if(prov=='seedream')$('#cfProxy').checked=true;
  $('#cfProtoW').hidden=prov!='custom';
  $('#cfFieldW').hidden=!(prov=='custom'&&$('#cfProto').value=='edits');
  cfgLabels(prov);
  cfgMessage=null;$('#cfMsg').textContent='';
  if(prov=='seedream')msg('火山方舟接口不允许浏览器跨域，已开启本站代理');
 });
+$('#cfComfySaved').onchange=e=>editComfy(comfyState.workflows.find(profile=>profile.id===e.target.value));
+$('#cfComfyNew').onclick=()=>{
+ editComfy();
+ $('#cfComfyWorkflow').focus();
+};
+$('#cfComfyDelete').onclick=()=>{
+ if(W.busy)return msg('请等待当前生成完成。',1);
+ if(!comfyDraft.id||!confirm(t('删除工作流「{name}」？',{name:comfyDraft.name})))return;
+ try{
+  useComfyState(workflowStore.remove(comfyState,comfyDraft.id));
+  editComfy(comfy.id?comfy:null);render();msg('已删除工作流');
+ }catch(error){msg(()=>comfySaveError(error),1)}
+};
+$('#wbWorkflow').onchange=e=>{
+ if(W.busy){e.target.value=comfy.id;return}
+ try{
+  useComfyState(workflowStore.select(comfyState,e.target.value));
+ }catch(error){toast(comfySaveError(error))}
+ render();
+};
 $('#cfComfyWorkflow').onchange=async e=>{
  const file=e.target.files[0],draft=comfyDraft,revision=++configRevision;
  if(!file)return;
@@ -359,47 +402,55 @@ $('#cfComfyWorkflow').onchange=async e=>{
  try{
   const workflow=window.ComfyUI.parseWorkflow(await file.text());
   if(revision!=configRevision||draft!==comfyDraft)return;
-  comfyDraft={...draft,workflow,mapping:{},name:file.name};
+  const name=$('#cfComfyProfileName').value.trim()||file.name.replace(/\.json$/i,'').trim();
+  comfyDraft={...draft,workflow,mapping:{},name,fileName:file.name};
+  $('#cfComfyProfileName').value=name;
   showComfyWorkflow(true);
-  cfgMessage=null;$('#cfMsg').textContent='';
+  cfgMessage=null;$('#cfComfyMsg').textContent='';
  }catch(error){
   if(revision==configRevision)msg(()=>comfyError(error),1);
  }
 };
 $('#cfProto').onchange=()=>{$('#cfFieldW').hidden=$('#cfProto').value!='edits'};
 $('#cfEye').onclick=()=>{const k=$('#cfKey');k.type=k.type=='password'?'text':'password';$('#cfEye').textContent=t(k.type=='password'?'显示':'隐藏')};
+const comfySaveError=error=>error.code?comfyError(error):t('无法在此浏览器中保存 ComfyUI 设置。');
+function setComfyProvider(){
+ if(!isComfy())cfg.cloudProv=cfg.prov;
+ cfg.prov='comfy';SV('wbCfg',cfg);
+}
+$('#cfComfySave').onclick=()=>{
+ if(W.busy)return msg('请等待当前生成完成。',1);
+ if(!comfyDraft.workflow)return msg('请选择 ComfyUI 试穿工作流。',1);
+ try{
+  useComfyState(workflowStore.save(comfyState,readComfy()));
+ }catch(error){return msg(()=>comfySaveError(error),1)}
+ setComfyProvider();
+ $('#cfComfyBase').value=comfy.base;editComfy(comfy);render();msg('已保存并选用工作流');
+};
 $('#cfSave').onclick=()=>{
  if(W.busy)return msg('请等待当前生成完成。',1);
  const o=cfgRead();
- if(o.prov=='comfy'){
-  if(!comfyDraft.workflow)return msg('请选择 ComfyUI 试穿工作流。',1);
-  try{saveComfy(readComfy())}catch(error){
-   return msg(error.code?()=>comfyError(error):'无法在此浏览器中保存 ComfyUI 设置。',1);
-  }
-  if(!isComfy())cfg.cloudProv=cfg.prov;
-  cfg.prov='comfy';
- }else{
-  if(o.prov=='custom'&&!o.base)return msg('自定义中转需要填写 Base URL',1);
-  Object.assign(cfg,o);
- }
- SV('wbCfg',cfg);render();cfgClose();toast('API 设置已保存在本机');
+ if(o.prov=='custom'&&!o.base)return msg('自定义中转需要填写 Base URL',1);
+ Object.assign(cfg,o);SV('wbCfg',cfg);render();cfgClose();toast('API 设置已保存在本机');
 };
 $('#cfClr').onclick=()=>{cfg.key='';$('#cfKey').value='';SV('wbCfg',cfg);render();msg('已从本机清除密钥')};
 function msg(key,bad,params){
  cfgMessage=typeof key=='function'?key:()=>t(key,params);
- const m=$('#cfMsg');m.textContent=cfgMessage();m.className='fine '+(bad?'bad':'good');
+ const m=$($('#comfyManager').hidden?'#cfMsg':'#cfComfyMsg');
+ m.textContent=cfgMessage();m.className='fine '+(bad?'bad':'good');
 }
+$('#cfComfyTest').onclick=async()=>{
+ const revision=++configRevision;
+ const report=(...args)=>{if(revision==configRevision)msg(...args)};
+ report('正在连接…');
+ try{
+  await window.ComfyUI.test($('#cfComfyBase').value);
+  report('已连接到 ComfyUI。');
+ }catch(error){report(()=>error.code=='timeout'?t('连接 ComfyUI 超时。'):comfyError(error),1)}
+};
 $('#cfTest').onclick=async()=>{
  const o=cfgRead(),revision=++configRevision;
  const report=(...args)=>{if(revision==configRevision)msg(...args)};
- if(o.prov=='comfy'){
-  report('正在连接…');
-  try{
-   await window.ComfyUI.test($('#cfComfyBase').value);
-   report('已连接到 ComfyUI。');
-  }catch(error){report(()=>error.code=='timeout'?t('连接 ComfyUI 超时。'):comfyError(error),1)}
-  return;
- }
  if(!o.key)return report('请先填写 API Key',1);
  if(o.prov=='custom'&&!o.base)return report('请填写 Base URL',1);
  report('正在连接…');
@@ -474,6 +525,7 @@ function progressTime(){
 }
 function busy(on){
  $('#wbStop').textContent=t(isComfy()?'停止等待':'取消');
+ $('#wbWorkflow').disabled=on;
  $('#wbBusy').hidden=!on;$('#wbGo').classList.toggle('run',on);$('#wbGo').disabled=on;clearInterval(tick);
  if(!on){render();return}
  $('#wbGo').innerHTML=`<i class="ring"></i>${t('生成中…')}`;
@@ -644,18 +696,19 @@ function show(i,history=false){
 }
 $('#wbRes').onclick=e=>{const b=e.target.closest('[data-ri]');b&&show(+b.dataset.ri)};$('#wbCmpT').onclick=()=>{W.cmp=!W.cmp;show(W.ri,fromHistory)};
 $('#wbZip').onclick=async()=>{if(!window.makeZip)return;const ts=stamp(new Date());const fs=W.results.map((r,i)=>({name:`posewear-${r.mode=='gen'?'gen':'tryon'}-${ts}-${String(i+1).padStart(2,'0')}.png`,blob:r.after}));window.X.dl(await makeZip(fs),`posewear-tryon-${ts}.zip`);toast('已打包 {count} 张',null,{count:fs.length})};
-$('#cfExp').onclick=()=>{
+function exportSettings(local){
  // ローカル試着のエクスポートには、以前に使用したクラウドのキーや接続先を含めません。
- const local=$('[name=prov]:checked')?.value=='comfy';
  const withKey=!local&&confirm(t('导出时包含 API Key 吗？\n确定 = 包含，取消 = 不含密钥'));
  const o=local?{prov:'comfy'}:{...cfg,prov:cfg.prov=='comfy'?cfg.cloudProv||'openai':cfg.prov};
  if(!withKey)delete o.key;
  const value={app:'衣姿 PoseWear',type:'api-config',cfg:o};
- if(local)value.comfy=comfy;
+ if(local)value.comfy=comfyState;
  window.X.dl(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}),t('衣姿-API设置.json'));
  msg(withKey?'已导出设置（含密钥，请妥善保管）':'已导出设置（不含密钥）');
-};
-$('#cfImp').onclick=()=>$('#cfImpF').click();
+}
+$('#cfExp').onclick=()=>exportSettings(false);
+$('#cfComfyExport').onclick=()=>exportSettings(true);
+$('#cfImp').onclick=$('#cfComfyImport').onclick=()=>$('#cfImpF').click();
 $('#cfImpF').onchange=async e=>{
  const file=e.target.files[0],revision=++configRevision;
  e.target.value='';
@@ -666,21 +719,17 @@ $('#cfImpF').onchange=async e=>{
   if(W.busy)return msg('请等待当前生成完成。',1);
   if(!Object.hasOwn(PROV,o.prov))throw Error('invalid provider');
   if(o.prov=='comfy'){
-   const {base,workflow,mapping,name}=j.comfy;
-   saveComfy({
-    base:window.ComfyUI.normalizeBase(base),
-    workflow:window.ComfyUI.parseWorkflow(JSON.stringify(workflow)),
-    mapping,name:typeof name=='string'?name:''
-   });
-   if(!isComfy())cfg.cloudProv=cfg.prov;
-   cfg.prov='comfy';
+   if(comfyState.workflows.length&&!confirm(t('用备份替换全部已注册的工作流？')))return;
+   useComfyState(workflowStore.replace(j.comfy));setComfyProvider();
+   cfgClose();comfyOpen();
   }else{
    // インポートでは既知の設定項目だけを反映します。
    for(const key of ['prov','base','key','model','field','proto','proxy']){
     if(typeof o[key]==typeof cfg[key])cfg[key]=o[key];
    }
+   comfyClose();cloudCfgOpen();
   }
-  SV('wbCfg',cfg);cfgFill();render();msg('已导入设置');
+  SV('wbCfg',cfg);render();msg('已导入设置');
  }catch(error){
   if(revision==configRevision)msg(error.code?()=>comfyError(error):'导入失败：文件格式不正确',1);
  }
@@ -737,6 +786,13 @@ addEventListener('uilocalechange',()=>{
   cfgLabels($('[name=prov]:checked')?.value||cfg.prov);
   if(cfgMessage)$('#cfMsg').textContent=cfgMessage();
  }
+ if(!$('#comfyManager').hidden){
+  $('#cfComfySaved').options[0].textContent=t('选择已注册的工作流');
+  for(const [,selector,required] of COMFY_BINDINGS){
+   $(selector).options[0].textContent=t(required?'请选择节点':'不指定节点');
+  }
+  if(cfgMessage)$('#cfComfyMsg').textContent=cfgMessage();
+ }
  if(!$('#pk').hidden){
   pickerTitle();
   if(A.DATA[pkType])drawPk();
@@ -749,7 +805,7 @@ addEventListener('uilocalechange',()=>{
 });
 if(document.body.classList.contains('studio'))WB.show();
 if(location.hash=='#studio'){const t0=()=>scrollTo(0,0);requestAnimationFrame(t0);addEventListener('load',()=>setTimeout(t0,0),{once:true})}
-addEventListener('keydown',e=>{if(e.key=='Escape'){if(!$('#pk').hidden)pkClose();else if(!$('#cfg').hidden)cfgClose()}});
+addEventListener('keydown',e=>{if(e.key=='Escape'){if(!$('#pk').hidden)pkClose();else if(!$('#comfyManager').hidden)comfyClose();else if(!$('#cfg').hidden)cfgClose()}});
 })();
 // v10：手机端把密钥引导卡放到第 1 步之前
 (()=>{const mq=matchMedia('(max-width:760px)'),o=document.getElementById('wbOnb');if(!o)return;const place=()=>{if(mq.matches){const s1=document.querySelector('.st-l [data-s="1"]');s1&&s1.parentNode.insertBefore(o,s1)}else document.querySelector('.st-c').prepend(o)};place();mq.addEventListener('change',place)})();
