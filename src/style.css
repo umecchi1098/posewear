@@ -128,7 +128,7 @@ body.tray .foot{padding-bottom:300px}
 #toast{position:fixed;left:50%;bottom:32px;transform:translate(-50%,14px);opacity:0;background:rgba(17,17,17,.92);color:#fff;padding:11px 22px;border-radius:99px;transition:transform .35s var(--out),opacity .25s;z-index:99;pointer-events:none;font-size:13.5px;box-shadow:var(--sh2)}
 #toast.on{opacity:1;transform:translate(-50%,0)}body.tray:not(.studio) #toast{bottom:auto;top:calc(var(--hdr,72px) + 14px)}
 #toTop{position:fixed;left:24px;bottom:24px;z-index:25;background:var(--bg2);box-shadow:var(--sh2);opacity:0;pointer-events:none;transition:opacity .3s}#toTop.on{opacity:1;pointer-events:auto}
-#helpBox,#pk,#cfg{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:rgba(0,0,0,.45);padding:20px;animation:fade .2s both}
+#helpBox,#pk,#cfg,#comfyManager{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:rgba(0,0,0,.45);padding:20px;animation:fade .2s both}
 #helpBox[hidden],#pk[hidden],#cfg[hidden],[hidden]{display:none!important}
 .hb{background:var(--bg2);padding:28px 30px;width:min(440px,100%);box-shadow:var(--sh3);border-radius:22px}.hb h3{font-size:20px;margin-bottom:14px}
 .hb dl{display:grid;grid-template-columns:auto 1fr;gap:9px 18px;margin:0 0 22px;font-size:13.5px}.hb dd{margin:0;color:var(--tx2)}.hb .pri{width:100%}
@@ -233,7 +233,7 @@ textarea{width:100%;font:13.5px/1.7 var(--sans);color:var(--tx);background:var(-
  .fi{grid-template-columns:1fr;gap:22px}
  #studio{padding:14px 12px 30px}.st-head{flex-direction:column;align-items:stretch;gap:14px}.st-head h2{font-size:24px}.modes{display:flex}.modes button{flex:1}
  .step{padding:16px;border-radius:18px}.stage,.cmp{min-height:420px}
- .prov{grid-template-columns:1fr 1fr}.pk-g{grid-template-columns:repeat(3,1fr);padding:6px 14px 14px;gap:12px 8px}#pk,#cfg{padding:0;place-items:end stretch}.pk-box,.cfg-box{max-height:90vh;border-radius:22px 22px 0 0}
+ .prov{grid-template-columns:1fr 1fr}.pk-g{grid-template-columns:repeat(3,1fr);padding:6px 14px 14px;gap:12px 8px}#pk,#cfg,#comfyManager{padding:0;place-items:end stretch}.pk-box,.cfg-box{max-height:90vh;border-radius:22px 22px 0 0}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 body.studio .tools{margin-left:auto}
@@ -568,7 +568,7 @@ button:active:not(:disabled){transform:scale(.97)}.tabs button:active,.chip:acti
 .tray-items{max-height:132px;overflow:auto}
 #cfHelp:empty{display:none}
 #trayN{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-#cfg:not([hidden])~#toast,body:has(#cfg:not([hidden])) #toast{bottom:calc(84px + env(safe-area-inset-bottom))}
+body:has(#cfg:not([hidden]),#comfyManager:not([hidden])) #toast{bottom:calc(84px + env(safe-area-inset-bottom))}
 #wbErr .raw{margin-top:10px;font-size:12px;color:var(--tx2)}#wbErr .raw summary{cursor:pointer;width:max-content}
 #wbErr .raw pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:140px;overflow:auto;background:var(--sf);border-radius:10px;padding:8px 10px;margin:8px 0 6px;font-size:11.5px}
 #wbErr p+p.fine{margin-top:-4px}
@@ -601,7 +601,7 @@ button:active:not(:disabled){transform:scale(.97)}.tabs button:active,.chip:acti
 }
 
 /* 翻訳でラベルが長くなっても、試着の各列とダイアログを画面幅に収めます。 */
-#studio .step .sh, #studio .q2 .row, #cfg .cfg-f { flex-wrap: wrap; }
+#studio .step .sh, #studio .q2 .row, :is(#cfg,#comfyManager) .cfg-f { flex-wrap: wrap; }
 #studio .q2 .lab, #studio .q2 select { min-width: 0; }
 #wbCharTxt, #wbExtra { min-height: 6.25em; }
 #pkQ { min-width: 0; }
@@ -617,8 +617,8 @@ button:active:not(:disabled){transform:scale(.97)}.tabs button:active,.chip:acti
   #pk .pk-h { flex-wrap: wrap; gap: 8px; }
   #pkT { flex: 1 0 calc(100% - 52px); order: -2; }
   #pkX { order: -1; }
-  #cfg .cfg-f { padding-inline: 14px; }
-  #cfg .cfg-f .sp { flex: 0 0 100%; height: 0; }
+  :is(#cfg,#comfyManager) .cfg-f { padding-inline: 14px; }
+  :is(#cfg,#comfyManager) .cfg-f .sp { flex: 0 0 100%; height: 0; }
   #cfTest { margin-left: auto; }
 }
 
@@ -635,3 +635,20 @@ button:active:not(:disabled){transform:scale(.97)}.tabs button:active,.chip:acti
 /* 言語ボタンを追加しても、狭い幅では右端の開閉ボタンまで折り返して操作できます。 */
 .tray-h { flex-wrap: wrap; }
 .pbox > .seg { margin-bottom: 10px; }
+
+/* ComfyUI の登録とノード割り当てを専用パネルにまとめます。 */
+.comfy-workflows,.comfy-bindings,.comfy-binding-column{display:grid;gap:10px}
+.comfy-bindings{grid-template-columns:repeat(2,minmax(0,1fr))}
+.comfy-binding-column{align-content:start}
+.comfy-binding-column select{min-width:0}
+.comfy-file{display:flex;align-items:center;gap:10px}
+.comfy-file-picker{position:relative;flex:none;cursor:pointer;border-radius:12px;background:var(--sf);color:var(--tx)}
+.comfy-file-picker:hover{background:var(--line)}
+/* ファイル入力の位置を隠しても、ラベルにフォーカスを表示します。 */
+.comfy-file-picker:has(:focus-visible){outline:2px solid var(--ac);outline-offset:2px}
+#cfComfyName{min-width:0;overflow-wrap:anywhere}
+@media (max-width:520px){.comfy-bindings{grid-template-columns:minmax(0,1fr)}}
+.comfy-samples{display:flex;flex-wrap:wrap;gap:8px 12px}
+#wbWorkflowControls{display:flex;align-items:end;gap:8px;flex-wrap:wrap}
+#wbWorkflowWrap{flex:1;min-width:0}
+#wbWorkflow{max-width:100%}

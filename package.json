@@ -6,7 +6,7 @@
   "scripts": {
     "build": "python3 build.py",
     "serve": "python3 -m http.server 8787 -d dist",
-    "test": "node tests/v12.js && node tests/v13.js && node tests/ui-locales.js",
+    "test": "node tests/v12.js && node tests/v13.js && node tests/ui-locales.js && node tests/comfy-local.js",
     "deploy": "wrangler pages deploy dist --project-name posewear"
   },
   "devDependencies": {
