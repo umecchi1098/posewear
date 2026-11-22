@@ -34,7 +34,7 @@
 <div class="step" data-s="2"><div class="sh"><i>2</i><b>服装</b><small id="s2R">必选</small><span class="sp"></span><label class="lnk btn">上传图<input type="file" id="wbGFile" accept="image/*" multiple hidden></label><button class="lnk" data-pick="costume">从库中选</button><button class="lnk" data-pick="anime">从动画服装选</button></div><div class="slot" id="wbG"></div></div>
 <div class="step" data-s="3"><div class="sh"><i>3</i><b>姿势</b><small id="s3R">可选</small><span class="sp"></span><button class="lnk" data-pick="pose">从库中选</button></div><div class="slot" id="wbPo"></div><div class="row r3"><button class="sm ghost" id="wbAllAng" hidden>全部角度</button><span class="sp"></span><div class="seg sm" id="wbBatch" role="group" aria-label="多姿势出图方式" hidden><button data-bm="each">分开出</button><button data-bm="sheet">拼一张</button></div></div></div>
 </aside>
-<main class="st-c"><div class="onb" id="wbOnb" hidden><div class="onb-i"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9m-3 3 3 3m-6 0 2 2"/></svg></div><div><b>需要一个图像模型的 API Key</b><p>支持 OpenAI、Gemini、豆包或中转。Key 只存在你的浏览器里。</p></div><button class="pri sm" id="wbOnbGo">去设置</button></div>
+<main class="st-c"><div class="onb" id="wbOnb" hidden><div class="onb-i"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9m-3 3 3 3m-6 0 2 2"/></svg></div><b>通过 API 生成</b><button class="pri sm" id="wbOnbGo">设置 API</button></div>
 <div class="stage" id="wbStage"><div class="ph0" id="wbPh0"><div class="ill"><i class="c1">人物</i><em>+</em><i class="c2">服装</i><em>→</em><i class="c3">结果</i></div><span>结果会显示在这里</span><p>选好人物和服装后点「生成」</p></div>
 <div class="cmp" id="wbCmp" hidden><img id="wbAfter" alt="生成结果"><div class="bef" id="wbBefW"><img id="wbBefore" alt="原始照片"></div><div class="hdl" id="wbHdl"><span></span></div><input type="range" id="wbRange" min="0" max="100" value="50" aria-label="前后对比"><em class="l">原图</em><em class="r">结果</em></div>
 <div class="busy" id="wbBusy" hidden><div class="skel0"></div><div class="bar0"><i id="wbProg"></i></div><b id="wbStage1">正在上传素材…</b><small id="wbTime">0 秒</small><button class="sm ghost" id="wbStop">取消</button></div>
@@ -50,9 +50,26 @@
 <details class="adv"><summary>高级设置</summary><div class="adv-b"><label class="tg mt"><input type="checkbox" id="wbKeepBg"><span><b>保留原照片背景与光线</b></span></label><label class="tg mt"><input type="checkbox" id="wbNeutral"><span><b>减少误拦截</b><small>用更中性的描述发送，减少正常穿搭被误判，不改变服装和姿势</small></span></label><textarea id="wbExtra" rows="2" placeholder="补充要求（可选），例如：海边日落、半身构图、手拿咖啡…"></textarea><div class="row"><div class="seg sm" role="group" aria-label="提示词语言"><button data-pl="en">英文</button><button data-pl="zh">中文</button><button data-pl="ja" lang="ja" translate="no">日本語</button></div><span class="sp"></span><button class="sm ghost" id="wbCopyP">复制</button><button class="sm ghost" id="wbReP">重置</button></div><textarea id="wbPrompt" rows="8" aria-label="最终提示词"></textarea><details id="wbJaPreview"><summary>查看日语译文</summary><textarea id="wbJaText" rows="7" lang="ja" aria-label="日语译文" readonly></textarea><small id="wbJaNeutral" class="fine" hidden>译文对应上方原始提示词，发送时会应用中性措辞设置。</small></details></div></details>
 <div class="hist"><div class="sh"><b>生成记录</b><span class="sp"></span><button class="sm ghost" id="wbHClr">清空</button></div><div class="hl" id="wbHist" data-empty-label="生成后会保存在这里（仅本机）"></div></div>
 <span class="sp"></span>
-<div class="gobar"><div class="gb-i"><span><b id="wbEst">将生成 1 张</b><small id="wbHint"></small></span><button class="cfgchip" id="wbCfg2" type="button"><span class="dot" id="wbDot2"></span><span id="wbProv2">未配置</span></button></div><button id="wbGo" class="pri big">生成</button></div>
+<div class="gobar"><div class="gb-i"><span><b id="wbEst">将生成 1 张</b><small id="wbHint"></small></span><button class="cfgchip" id="wbCfg2" type="button"><span class="dot" id="wbDot2"></span><span id="wbProv2">未配置</span></button></div>
+ <div class="chat-entry"><button id="wbChatOpen" class="big ghost" type="button" aria-haspopup="dialog" disabled>复制到聊天</button><button id="wbGo" class="pri big">生成</button></div>
+</div>
 </aside>
 </div></section>
+
+<dialog id="wbChat" data-ui-section aria-labelledby="wbChatTitle">
+ <header class="chat-header">
+  <h2 id="wbChatTitle">复制到聊天</h2>
+  <form method="dialog"><button class="icon" aria-label="关闭" autofocus>✕</button></form>
+ </header>
+ <div class="chat-content">
+  <label class="chat-poses" hidden>姿势<select id="wbChatPose"></select></label>
+  <ol id="wbChatImages"></ol>
+  <div class="chat-prompt-header"><label for="wbChatPrompt">最终提示词</label><button id="wbChatCopyPrompt" class="sm pri" type="button">复制提示词</button></div>
+  <p id="wbChatEdited" class="chat-status" hidden>各姿势使用同一段手动编辑的提示词。请核对图片编号。</p>
+  <textarea id="wbChatPrompt" rows="8" readonly></textarea>
+  <p id="wbChatStatus" class="chat-status" role="status"></p>
+ </div>
+</dialog>
 
 <div id="pk" data-ui-section hidden role="dialog" aria-modal="true" aria-label="选择素材"><div class="pk-box"><div class="pk-h"><b id="pkT">选择服装</b><input id="pkQ" type="search" placeholder="搜索…" autocomplete="off"><button class="sm pri" id="pkDone" hidden>完成</button><button class="icon" id="pkX" aria-label="关闭">✕</button></div><div class="pk-g" id="pkG"></div></div></div>
 <div id="cfg" data-ui-section hidden role="dialog" aria-modal="true" aria-labelledby="cfgT"><div class="cfg-box"><div class="pk-h"><b id="cfgT">API 设置</b><button class="icon" id="cfgX" aria-label="关闭">✕</button></div>

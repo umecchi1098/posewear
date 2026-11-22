@@ -26,6 +26,7 @@ Pose, outfit and portrait reference galleries with prompts in English, Japanese 
 - **Five galleries**: poses (multi-angle line sketches), depth poses (hotlinked depth maps), outfits (by season and type), anime outfits (anime-style looks), and portraits (face references, CC0). Item titles follow the interface language. You can copy prompts in English, Japanese or Chinese.
 - **Search and filters**: search by Chinese, English or Japanese titles, filter by category, sort, or pick a random image. Each item has its own static page for sharing.
 - **Try-on studio**: upload a photo, pick an outfit and a pose, then generate. You can also generate without a photo. It supports several outputs per run, a before/after slider, and single or zip download.
+- **Copy for chat**: copy each numbered reference image and the final prompt from one screen. You can also download each image. Copying and downloading work without an API key.
 - **Generation history**: stored locally in IndexedDB. You can view, delete or clear items, and undo.
 - **Clear errors**: an invalid key, a rate limit, a timeout or a safety block each get their own message and a suggested next step.
 - **Reduce false safety blocks**: on by default. The studio rewrites its prompt into a neutral e-commerce try-on description without changing the outfit or pose. Turn it off to send the prompt as is.

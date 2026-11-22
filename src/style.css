@@ -343,6 +343,43 @@ button.empty0::before{content:"";flex:none;width:40px;height:40px;border-radius:
 .st-r .hist .sh{margin-bottom:8px}.st-r .hist .sh small{display:none}.st-r .hl button{width:54px;height:72px;border-radius:10px}.st-r .hl:empty::before{content:attr(data-empty-label)}
 .st-r>.sp{flex:1 1 0;min-height:0}
 .st-r .gobar{position:static;box-shadow:0 8px 30px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.04);background:var(--bg2)}
+/* チャットへのコピーとAPI生成を並べ、どちらも設定後に選べるようにします。 */
+.chat-entry{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.chat-entry .big{padding:10px 8px;font-size:13px}
+.chat-entry .ghost{box-shadow:none}
+#wbChat{
+ width:min(640px,calc(100% - 24px));max-height:calc(100dvh - 24px);padding:0;
+ border:1px solid var(--line2);border-radius:20px;overflow:hidden;
+ background:var(--bg2);color:var(--tx);box-shadow:var(--sh3);
+}
+#wbChat[open]{display:flex;flex-direction:column}
+#wbChat::backdrop{background:rgba(0,0,0,.52)}
+.chat-header,.chat-prompt-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.chat-header{padding:12px 16px;border-bottom:1px solid var(--line2)}
+.chat-header h2{margin:0;font-size:17px}
+.chat-content{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px}
+.chat-poses{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.chat-poses select{min-width:0;max-width:100%}
+#wbChatImages{list-style:none;margin:0 0 16px;padding:0;display:grid;gap:6px}
+.chat-reference{
+ display:grid;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:0 10px;
+ padding:8px;border:1px solid var(--line2);border-radius:12px;
+}
+.chat-reference img{width:48px;height:54px;object-fit:contain;background:var(--sf);border-radius:6px}
+.chat-reference small{display:block;color:var(--tx2);overflow-wrap:anywhere}
+.chat-reference-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}
+.chat-reference-actions .sm{padding:6px 9px}
+.chat-prompt-header{margin-bottom:8px;font-weight:600}
+#wbChatPrompt{display:block;width:100%;min-height:100px;resize:vertical}
+.chat-status{grid-column:2/-1;margin:0;font-size:12px;color:var(--tx2)}
+.chat-status:not(:empty){margin-top:5px}
+#wbChatEdited{margin:0 0 8px}
+@media(max-width:420px){
+ .chat-content{padding:12px}
+ .chat-reference{grid-template-columns:40px minmax(0,1fr)}
+ .chat-reference img{width:40px;height:48px;grid-row:span 2}
+ .chat-reference-actions{justify-content:flex-start}
+}
 .cfgchip{display:none}
 .gobar .big:disabled{background:#f1f1f1;color:#aaa;box-shadow:none;opacity:1;cursor:not-allowed}[data-theme=dark] .gobar .big:disabled{background:#2a2a2a;color:#666}
 /* center */

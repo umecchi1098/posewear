@@ -42,7 +42,14 @@ function loadImg(src){return new Promise((r,j)=>{const i=new Image();i.onload=()
 async function toJpeg(src,max=1536){const i=await loadImg(src);let w=i.naturalWidth,h=i.naturalHeight,s=Math.min(1,max/Math.max(w,h));w=Math.round(w*s);h=Math.round(h*s);
  const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(i,0,0,w,h);return new Promise(r=>c.toBlob(b=>r({blob:b,w,h}),'image/jpeg',.92))}
 const libSrc=a=>{const it=A.ITEMS[a.k];return it.type=='pose'?it.angles[a.ai??it.ai].i:it.i};
-async function assetBlob(a){if(a.kind=='file')return a.blob;const src=libSrc(a);const r=await fetch(src);if(!r.ok)throw imageError('素材下载失败（{status}）',{status:r.status});const u=URL.createObjectURL(await r.blob());try{return(await toJpeg(u,1280)).blob}finally{URL.revokeObjectURL(u)}}
+// コピーではAPI用の縮小を行わず、選択中の画像データを読み込みます。
+async function referenceBlob(asset){
+ if(asset.blob)return asset.blob;
+ const response=await fetch(libSrc(asset));
+ if(!response.ok)throw imageError('素材下载失败（{status}）',{status:response.status});
+ return response.blob();
+}
+async function assetBlob(a){if(a.kind=='file')return a.blob;const u=URL.createObjectURL(await referenceBlob(a));try{return(await toJpeg(u,1280)).blob}finally{URL.revokeObjectURL(u)}}
 const b64=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result.split(',')[1]);f.readAsDataURL(b)});
 const dataURL=async b=>'data:'+(b.type||'image/jpeg')+';base64,'+await b64(b);
 const isGen=()=>W.mode=='gen';const hasPerson=()=>W.persons.length>0;
@@ -130,17 +137,22 @@ function render(localeOnly=false){const G=isGen();$$('[data-mode]').forEach(b=>b
  const ok=!!cfg.key;$('#wbDot').className='dot'+(ok?' on':'');$('#wbProv').textContent=ok?provider(cfg.prov)+' · '+modelOf():t('未配置 API');$('#wbDot2').className='dot'+(ok?' on':'');$('#wbProv2').textContent=ok?provider(cfg.prov):t('未配置 API');$('#wbOnb').hidden=ok;
  const dn=[G?true:hasPerson(),W.garments.length>0,W.poses.length>0,!!(W.style||$('#wbExtra').value)];$$('.step[data-s]').forEach(e=>e.classList.toggle('done',dn[e.dataset.s-1]));
  const jobs=nJobs();$('#wbEst').textContent=t('将生成 {count} 张',{count:jobs});
- const miss=[!G&&!hasPerson()&&'人物照片',!W.garments.length&&'服装',!ok&&'API 密钥'].filter(Boolean).map(key=>t(key));
- $('#wbHint').textContent=miss.length?t('还缺：{items}',{items:miss.join(locale()=='en'?', ':'、')}):t('每张约半分钟');
+ const miss=[!G&&!hasPerson()&&'人物照片',!W.garments.length&&'服装'].filter(Boolean).map(key=>t(key));
+ $('#wbHint').textContent=miss.length?t('还缺：{items}',{items:miss.join(locale()=='en'?', ':'、')}):ok?t('每张约半分钟'):'';
  $('#wbHint').classList.toggle('miss',!!miss.length);
- const need=!G&&!hasPerson()?'请先上传人物照片':!W.garments.length?'请先选择服装':'';
+ const need=missingReference();
  const go=$('#wbGo');
+ const chat=$('#wbChatOpen');chat.disabled=!!need;chat.title=need?t(need):'';
  if(W.busy){const label=go.lastChild;if(label?.nodeType===Node.TEXT_NODE)label.textContent=t('生成中…')}
  else{go.disabled=!!need;go.title=need?t(need):'';go.textContent=t(need||'生成')}
  $$('.flow [data-f]').forEach(e=>e.classList.toggle('on',e.dataset.f<4?dn[e.dataset.f-1]&&(e.dataset.f!=3||W.poses.length>0):!need.length));
  if(localeOnly)return;
  SV('wbSel',{g:W.garments.filter(g=>g.kind=='lib').map(g=>g.k),p:W.poses.filter(p=>p.kind=='lib').map(p=>[p.k,p.ai])});reprompt()}
 const nJobs=()=>(W.poses.length>1&&W.bm=='each'?W.poses.length:1)*(+$('#wbN').value||1);
+function missingReference(){
+ if(!isGen()&&!hasPerson())return '请先上传人物照片';
+ return W.garments.length?'':'请先选择服装';
+}
 // ---------- 上传 ----------
 async function addPortrait(it){if(W.persons.length>=3)return toast('最多 3 张人物照片');try{const x=await toJpeg(it.m,1536);W.persons.push({blob:x.blob,url:URL.createObjectURL(x.blob),w:x.w,h:x.h,k:it.k});render();toast(W.mode=='gen'?'已设为脸部参考（生成时保持这张脸）':'已设为人物照片')}catch(e){toast('人像加载失败')}}
 async function addPersons(files){files=[...files].filter(f=>/^image\//.test(f.type));if(!files.length)return toast('请选择图片文件');for(const f of files){if(W.persons.length>=3){toast('最多 3 张人物照片');break}const u=URL.createObjectURL(f);try{const r=await toJpeg(u,1536);W.persons.push({blob:r.blob,url:URL.createObjectURL(r.blob),w:r.w,h:r.h})}catch(e){toast('无法读取这张图片')}finally{URL.revokeObjectURL(u)}}render()}
@@ -148,7 +160,7 @@ const drop=$('#wbDrop');$('#wbFile').onchange=e=>{addPersons(e.target.files);e.t
 ['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('over')}));['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('over')}));
 drop.addEventListener('drop',e=>addPersons(e.dataTransfer.files));drop.addEventListener('keydown',e=>{if(e.key=='Enter'||e.key==' '){e.preventDefault();$('#wbFile').click()}});
 $('#wbGFile').onchange=async e=>{const fs=[...e.target.files];e.target.value='';W.garments=W.garments.filter(g=>g.kind=='file');for(const f of fs){if(W.garments.length>=2){toast('最多上传 2 张服装图（上装 + 下装）');break}const u=URL.createObjectURL(f);try{const r=await toJpeg(u,1280);URL.revokeObjectURL(u);W.garments.push({kind:'file',blob:r.blob,url:URL.createObjectURL(r.blob),name:f.name})}catch(x){toast('无法读取服装图')}}render()};
-document.addEventListener('paste',e=>{if(document.body.classList.contains('studio')&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){const f=[...e.clipboardData.files].filter(f=>/^image/.test(f.type));if(f.length)addPersons(f)}});
+document.addEventListener('paste',e=>{if(document.body.classList.contains('studio')&&!chatDialog.open&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){const f=[...e.clipboardData.files].filter(f=>/^image/.test(f.type));if(f.length)addPersons(f)}});
 $('#studio').addEventListener('click',e=>{const t=e.target;let b;
  if(b=t.closest('[data-rm]')){const i=+b.dataset.i;b.dataset.rm=='pose'?W.poses.splice(i,1):W.garments.splice(i,1);render()}
  if(b=t.closest('[data-rmp]')){W.persons.splice(+b.dataset.rmp,1);render()}
@@ -164,6 +176,109 @@ $('#wbAllAng').onclick=()=>{const p=W.poses[0],it=A.ITEMS[p.k];W.poses=it.angles
 $('#wbJaPreview').ontoggle=renderJapanesePreview;
 $('#wbPrompt').oninput=()=>{W.dirty=true;renderJapanesePreview()};$('#wbExtra').oninput=()=>reprompt();$('#wbReP').onclick=()=>{reprompt(true);toast('已按当前选择重新生成提示词')};
 $('#wbCopyP').onclick=()=>A.copy($('#wbPrompt').value,'提示词');
+// チャット用の画面を開くたびに設定を読み直し、ポーズごとの画像番号と本文を揃えます。
+const chatDialog=$('#wbChat'),chatPose=$('#wbChatPose'),chatImages=$('#wbChatImages');
+const chatPrompt=$('#wbChatPrompt'),chatStatus=$('#wbChatStatus');
+let chatJobs=[];
+let chatCopyRevision=0;
+function renderChatJob(){
+ chatCopyRevision++;
+ const job=chatJobs[Number(chatPose.value)||0];
+ chatPrompt.value=job.prompt;
+ chatStatus.textContent='';
+ chatImages.innerHTML=job.images.map(({asset,role},index)=>{
+  const item=A.ITEMS[asset.k];
+  const name=item?A.title(item):asset.name||'';
+  const angle=role=='姿势'?angleLabel(item.angles[asset.ai??item.ai]):'';
+  const src=asset.url||(angle?A.ath(item.angles[asset.ai??item.ai].t):A.thumb(item));
+  const label=t('参考图 {count}',{count:index+1});
+  return `<li class="chat-reference"><img src="${esc(src)}" alt="">
+   <div><b>${esc(label)} · ${esc(t(role))}</b>${name?`<small>${esc(name)}${angle?' · '+esc(angle):''}</small>`:''}</div>
+   <div class="chat-reference-actions"><button class="sm" type="button" data-image="${index}" aria-label="${esc(label+' '+t('复制图片'))}">${t('复制图片')}</button>
+   <button class="sm ghost" type="button" data-image="${index}" data-save aria-label="${esc(label+' '+t('下载'))}">${t('下载')}</button></div>
+   <p class="chat-status" role="status"></p></li>`;
+ }).join('');
+}
+$('#wbChatOpen').onclick=()=>{
+ const shared=[...W.persons.map(asset=>({asset,role:'人物照片'})),...W.garments.map(asset=>({asset,role:'服装'}))];
+ const edited=W.dirty?$('#wbPrompt').value:'';
+ chatJobs=poseSets().map(set=>({
+  images:[...shared,...set.map(asset=>({asset,role:'姿势'}))],
+  prompt:edited.trim()?edited:compose(set)
+ }));
+ chatPose.replaceChildren(...chatJobs.map((job,index)=>new Option(t('姿势 {count}',{count:index+1}),String(index))));
+ chatPose.parentElement.hidden=chatJobs.length===1;
+ $('#wbChatEdited').hidden=chatJobs.length===1||!edited.trim();
+ chatPrompt.lang=W.pl==='zh'?'zh-CN':W.pl;
+ renderChatJob();
+ chatDialog.showModal();
+};
+chatPose.onchange=renderChatJob;
+// ダイアログを操作中は、試着画面の外のショートカットにキーを渡しません。
+chatDialog.addEventListener('keydown',event=>event.stopPropagation());
+chatDialog.addEventListener('close',()=>{
+ if(chatDialog.open)return;
+ chatCopyRevision++;
+ chatJobs=[];
+ chatImages.replaceChildren();
+ chatPrompt.value='';
+});
+$('#wbChatCopyPrompt').onclick=async()=>{
+ const revision=++chatCopyRevision;
+ let message='已复制提示词';
+ try{
+  await navigator.clipboard.writeText(chatPrompt.value);
+ }catch{
+  if(!chatDialog.open||revision!==chatCopyRevision)return;
+  chatPrompt.select();
+  message='无法复制提示词，请复制选中的文字。';
+ }
+ if(chatDialog.open&&revision===chatCopyRevision)chatStatus.textContent=t(message);
+};
+chatImages.onclick=async event=>{
+ const button=event.target.closest('[data-image]');
+ if(!button||button.disabled)return;
+ const index=Number(button.dataset.image);
+ const {asset}=chatJobs[Number(chatPose.value)||0].images[index];
+ const status=button.closest('li').querySelector('[role=status]');
+ const save=button.hasAttribute('data-save');
+ const revision=save?null:++chatCopyRevision;
+ const isCurrent=()=>save||(chatDialog.open&&revision===chatCopyRevision);
+ button.disabled=true;
+ status.textContent='';
+ let imageErrorMessage='';
+ try{
+  if(!save&&(!navigator.clipboard?.write||!window.ClipboardItem))throw Error('Clipboard unavailable');
+  // 書き込みはクリック中に始めます。PNGへの変換はClipboardItemにPromiseで渡します。
+  const png=referenceBlob(asset).then(async blob=>{
+   if(blob.type!=='image/png'){
+    const image=await createImageBitmap(blob);
+    const canvas=document.createElement('canvas');
+    canvas.width=image.width;canvas.height=image.height;
+    canvas.getContext('2d').drawImage(image,0,0);
+    image.close();
+    blob=await new Promise((resolve,reject)=>canvas.toBlob(result=>result?resolve(result):reject(Error()),'image/png'));
+   }
+   // 読み込み中にポーズを切り替えた場合、前の画像でコピー済みの内容を上書きしません。
+   if(!isCurrent())throw new DOMException('Copy cancelled','AbortError');
+   return blob;
+  }).catch(error=>{
+   imageErrorMessage=error.ui?.()||t('图片读取失败');
+   throw error;
+  });
+  if(save)window.X.dl(await png,`posewear-reference-${index+1}.png`);
+  else {
+   // 書き込みを拒否された場合も、ブラウザーに渡した画像の取得エラーを処理します。
+   png.catch(()=>{});
+   await navigator.clipboard.write([new ClipboardItem({'image/png':png})]);
+  }
+  if(isCurrent())status.textContent=t(save?'已开始下载':'已复制图片');
+ }catch{
+  if(isCurrent())status.textContent=imageErrorMessage||t(save?'下载失败':'无法复制图片，请下载。');
+ }finally{
+  button.disabled=false;
+ }
+};
 // ---------- 选择器 ----------
 let pkType='costume',pkSelected=false;
 function pickerTitle(){
@@ -313,7 +428,7 @@ function busy(on){
  T0=Date.now();PR=.03;progressTime();
  tick=setInterval(()=>{const cap=(done+.95)/total;PR=Math.max(done/total,Math.min(cap,PR+(cap-PR)*.03));$('#wbProg').style.transform=`scaleX(${PR})`;progressTime()},250);
 }
-async function run(){if(!cfg.key){toast('请先配置你的 API');return cfgOpen()}if(!isGen()&&!hasPerson())return toast('请先上传人物照片');if(!W.garments.length)return toast('请先选择服装');
+async function run(){if(!cfg.key){toast('请先配置你的 API');return cfgOpen()}const need=missingReference();if(need)return toast(need);
  const ac=new AbortController();W.busy=ac;$('#wbErr').hidden=true;$('#wbWarn').hidden=true;
  // 非同期の画像読み込みが始まる前に、表示中の送信言語と本文を画像ごとに確定します。
  const n=+$('#wbN').value||1,jobs=[],pl=W.pl,edited=W.dirty?$('#wbPrompt').value.trim():'';

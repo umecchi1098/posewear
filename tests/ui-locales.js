@@ -405,6 +405,142 @@ async function studio(page) {
   assert.match(await page.locator('[data-pl=ja]').getAttribute('class'),/\bon\b/);
 }
 
+// APIキーのない状態で、画像と本文を別ページへ実際に貼り付けます。
+async function chatCopy(browser) {
+  const context = await browser.newContext({
+    locale: 'ja-JP', permissions: ['clipboard-read', 'clipboard-write'], serviceWorkers: 'block',
+  });
+  const pasteKey = process.platform === 'darwin' ? 'Meta+v' : 'Control+v';
+  try {
+    const page = await context.newPage();
+    const receiver = await context.newPage();
+    await receiver.route('**/clipboard-receiver', route => route.fulfill({
+      contentType: 'text/html',
+      body: `<textarea aria-label="Paste target"></textarea><script>
+        document.querySelector('textarea').addEventListener('paste', async event => {
+          const file = event.clipboardData.files[0];
+          if (!file) return;
+          const image = await createImageBitmap(file);
+          document.body.dataset.image = [file.type, image.width, image.height].join(',');
+          image.close();
+        });
+      </script>`,
+    }));
+    await receiver.goto(origin + '/clipboard-receiver');
+    await page.bringToFront();
+    const posts = [];
+    page.on('request', request => {
+      if (request.method() === 'POST') posts.push(request.url());
+    });
+    await page.goto(origin + '/#studio');
+    await visible(page, '#wbOnb');
+    assert.equal(await page.locator('#wbChatOpen').isDisabled(), true);
+    await page.setInputFiles('#wbFile', path.join(fixtures, 'person.png'));
+    await page.setInputFiles('#wbGFile', ['mk1.png', 'mk2.png'].map(name => path.join(fixtures, name)));
+    await page.click('.step[data-s="3"] .lnk');
+    await page.locator('#pkG button').first().click();
+    await page.click('#pkDone');
+    await page.selectOption('#wbPo [data-ang]', '1');
+    await page.click('#wbChatOpen');
+    const selectedAnglePrompt = await page.inputValue('#wbChatPrompt');
+    await page.keyboard.press('Escape');
+    await page.click('#wbAllAng');
+    await page.click('#wbChatOpen');
+    await visible(page, '#wbChat[open]');
+    const references = page.locator('#wbChatImages li');
+    assert.deepEqual(await references.locator('b').allTextContents(),
+      ['画像1 · 人物写真', '画像2 · 衣装', '画像3 · 衣装', '画像4 · ポーズ']);
+    const firstPose = await page.inputValue('#wbChatPrompt');
+    assert.match(firstPose, /image 4 is pose sketch/);
+    await page.selectOption('#wbChatPose', '1');
+    const secondPose = await page.inputValue('#wbChatPrompt');
+    assert.match(secondPose, /image 4 is pose sketch/);
+    assert.notEqual(secondPose, firstPose);
+    assert.equal(secondPose, selectedAnglePrompt);
+    const [width, height] = await page.locator('#wbPersons img').evaluate(image => [image.naturalWidth, image.naturalHeight]);
+    assert.ok(width && height);
+    await references.first().locator('button').first().click();
+    await wait(page, () => document.querySelector('#wbChatImages [role=status]').textContent === '画像をコピーしました');
+    await receiver.bringToFront();
+    await receiver.locator('textarea').focus();
+    await receiver.keyboard.press(pasteKey);
+    await wait(receiver, expected => document.body.dataset.image === expected, `image/png,${width},${height}`);
+
+    await page.bringToFront();
+    await page.click('#wbChatCopyPrompt');
+    await wait(page, () => document.querySelector('#wbChatStatus').textContent === 'プロンプトをコピーしました');
+    await receiver.bringToFront();
+    await receiver.keyboard.press(pasteKey);
+    assert.equal(await receiver.locator('textarea').inputValue(), secondPose);
+
+    await page.bringToFront();
+    await page.evaluate(() => {
+      const write = navigator.clipboard.write;
+      navigator.clipboard.write = function () {
+        this.write = write;
+        return Promise.reject(new DOMException('Denied', 'NotAllowedError'));
+      };
+    });
+    const poseCopy = references.last().locator('button').first();
+    await poseCopy.click();
+    await page.getByText('画像をコピーできませんでした。ダウンロードしてください。').waitFor();
+    await page.route('**/p/i/**', route => route.fulfill({ status: 503 }));
+    await poseCopy.click();
+    await page.getByText(/HTTP 503/).waitFor();
+    await page.unroute('**/p/i/**');
+    const [download] = await Promise.all([
+      page.waitForEvent('download'), references.last().locator('[data-save]').click(),
+    ]);
+    assert.equal(download.suggestedFilename(), 'posewear-reference-4.png');
+    assert.equal((await fs.readFile(await download.path())).subarray(1, 4).toString(), 'PNG');
+
+    // 前のポーズの取得が遅れても、新しくコピーした本文がクリップボードに残ります。
+    let release;
+    const delayed = new Promise(resolve => { release = resolve; });
+    await page.route('**/p/i/**', async route => {
+      await delayed;
+      await route.continue();
+    });
+    const pendingRequest = page.waitForRequest('**/p/i/**');
+    const oldButton = await poseCopy.elementHandle();
+    await poseCopy.click();
+    await pendingRequest;
+    await page.selectOption('#wbChatPose', '0');
+    await page.click('#wbChatCopyPrompt');
+    await wait(page, () => document.querySelector('#wbChatStatus').textContent === 'プロンプトをコピーしました');
+    release();
+    await wait(page, button => !button.disabled, oldButton);
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), firstPose);
+    await page.unroute('**/p/i/**');
+
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#wbChat').isVisible(), false);
+    await page.click('[data-bm=sheet]');
+    await page.click('#wbChatOpen');
+    assert.ok(await references.count() > 4);
+    assert.match(await page.inputValue('#wbChatPrompt'), /panels in one image/);
+    await page.keyboard.press('Escape');
+    await page.click('details.adv summary');
+    await page.click('[data-pl=ja]');
+    await page.click('#wbChatOpen');
+    assert.match(await page.inputValue('#wbChatPrompt'), /画像4～/);
+    await page.keyboard.press('Escape');
+    const edited = '衣装を忠実に再現。\n背景はスタジオ。';
+    await page.fill('#wbPrompt', edited);
+    await page.click('#wbChatOpen');
+    assert.equal(await page.inputValue('#wbChatPrompt'), edited);
+    await page.keyboard.press('Escape');
+    await page.click('[data-mode=gen]');
+    await page.click('#wbPersons [data-rmp]');
+    await page.click('#wbChatOpen');
+    assert.match(await references.first().locator('b').textContent(), /画像1 · 衣装/);
+    assert.match(await page.inputValue('#wbChatPrompt'), /^参照画像を使ってファッション写真を生成する。/);
+    assert.deepEqual(posts, []);
+  } finally {
+    await context.close();
+  }
+}
+
 async function capture(browser) {
   await fs.mkdir(screenshots, { recursive: true });
   for (const [name, viewport] of [['desktop', { width: 1440, height: 900 }], ['mobile', { width: 390, height: 844 }]]) {
@@ -483,6 +619,8 @@ async function capture(browser) {
     }
     await failedCatalog(browser);
     console.log('PASS localized catalog failure and retry');
+    await chatCopy(browser);
+    console.log('PASS API-key-free chat copy, clipboard paste, download and pose grouping');
     await capture(browser);
     console.log('PASS desktop and mobile screenshots across three locales');
   } finally {
