@@ -68,7 +68,7 @@ def shell(lang,path,title,desc,body,ld,en=True,og=None,ogt='website'):
     '图片来自 AI Pose Gallery / AI Costume Gallery（原作者 @giaaibusi）与 AI Portrait Gallery（@agi_aibusi，CC0 1.0），均为 AI 生成图，中文描述由本站整理。<a href="/">返回首页</a>')
   return f'''<!doctype html><html lang="{'en' if lang=='en' else 'zh-CN'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{E(title)}</title><meta name="description" content="{E(desc[:160])}"><link rel="canonical" href="{url(lang,path)}">{alts(path) if en else ''}
-<meta property="og:type" content="{ogt}"><meta property="og:site_name" content="衣姿 PoseWear"><meta property="og:title" content="{E(title)}"><meta property="og:description" content="{E(desc[:160])}"><meta property="og:image" content="{SITE}/{og or 'og.png'}"><meta property="og:url" content="{url(lang,path)}"><meta property="og:locale" content="{'en_US' if lang=='en' else 'zh_CN'}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:description" content="{E(desc[:160])}">
+<meta property="og:type" content="{ogt}"><meta property="og:site_name" content="衣姿 PoseWear"><meta property="og:title" content="{E(title)}"><meta property="og:description" content="{E(desc[:160])}"><meta property="og:image" content="{media_url(og or 'og.png', absolute=True)}"><meta property="og:url" content="{url(lang,path)}"><meta property="og:locale" content="{'en_US' if lang=='en' else 'zh_CN'}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:description" content="{E(desc[:160])}">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/{A['fonts.css']}"><style>{CSS2}</style>
 <script type="application/ld+json">{json.dumps({"@context":"https://schema.org","@graph":ld},ensure_ascii=False,separators=(',',':'))}</script></head><body>
 <header><a href="{P}/">{LOGO}衣姿 PoseWear</a>{nav}</header>
@@ -111,7 +111,7 @@ def detail(lang,kind,it,rel):
   kws=[cz_,cen]+([it['line'],it['lineEn']] if kind=='pose' else [])+([x[1] if x[0]=='item' else cz(x[1]) for x in ctags(it)] if kind in ('costume','anime') else [])+([it['sec'],it['st']] if kind=='portrait' else [])
   kws=[k for k in kws if k]
   creator={"@type":"Person","name":src[2],"url":src[3]}
-  io={"@type":"ImageObject","@id":url(lang,path)+'#image',"name":t,"description":desc,"contentUrl":f"{SITE}/{img}","thumbnailUrl":f"{TS(th)}","url":url(lang,path),"width":w,"height":h,
+  io={"@type":"ImageObject","@id":url(lang,path)+'#image',"name":t,"description":desc,"contentUrl":media_url(img, absolute=True),"thumbnailUrl":f"{TS(th)}","url":url(lang,path),"width":w,"height":h,
       "encodingFormat":"image/webp","inLanguage":'en' if not zh else 'zh-CN',"keywords":', '.join(kws),"creator":creator,"creditText":f"{src[0]} ({src[2]})","acquireLicensePage":src[1],
       "isPartOf":{"@type":"WebSite","name":"衣姿 PoseWear","url":SITE+'/'},"dateModified":LM[kind]}
   if kind=='portrait': io.update({"license":CC0,"copyrightNotice":"CC0 1.0 (public domain dedication) by @agi_aibusi"})
@@ -119,7 +119,7 @@ def detail(lang,kind,it,rel):
   if kind in ('costume','anime'): tags=[(x[1] if x[0]=='item' else cz(x[1]),x[2]) for x in ctags(it) if x[2].replace(' ','-') in TAGS]
   tg='<div class="tg">'+f'<a href="{P}/{kind}/{slug}/">{E(cz_ if zh else cen)}</a>'+''.join(f'<a href="{P}/tag/{en.replace(" ","-")}/">{E(z if zh else en)}</a>' for z,en in tags)+(f'<a href="/portrait/{RSEC[it["sec"]][0]}/">{E(it["sec"])}</a>' if kind=='portrait' else '')+'</div>'
   if kind=='pose':
-    ang=('<div class="box"><small>'+('拍摄角度' if zh else 'Camera angles')+'</small><ul>'+''.join(f'<li><a href="/{a["i"]}">{E(a["zh"] if zh else a["en"])}</a> · <code>{E(a["en"])}</code></li>' for a in angs)+'</ul></div>')
+    ang=('<div class="box"><small>'+('拍摄角度' if zh else 'Camera angles')+'</small><ul>'+''.join(f'<li><a href="{media_url(a["i"])}">{E(a["zh"] if zh else a["en"])}</a> · <code>{E(a["en"])}</code></li>' for a in angs)+'</ul></div>')
   else: ang=''
   lic=('<p class="mu">'+(f'许可：<a href="{CC0}" rel="license">CC0 1.0</a>，可商用、可修改，无需署名；原作者希望不要原样批量转载。来源：<a href="{src[1]}" rel="noopener">{src[0]}</a>（<a href="{src[3]}" rel="noopener">{src[2]}</a>）。' if kind=='portrait' else
        (f'来源：<a href="{src[1]}" rel="noopener">{src[0]}</a>，原作者 <a href="{src[3]}" rel="noopener">{src[2]}</a>。原站未标明授权，转载或商用请先联系原作者。' if zh else
@@ -132,7 +132,7 @@ def detail(lang,kind,it,rel):
     boxes += f'<div class="box"><small>中文描述</small><p lang="zh-CN">{E(prz)}</p></div>'
   boxes += f'<div class="box"><small>{"中文提示词" if zh else "Chinese prompt"}</small><p lang="zh-CN">{E(pzh)}</p></div>'
   rl=''.join(cardli(lang,kind,r) for r in rel)
-  body=f'''<main><div class="im"><img src="/{img}" alt="{E(t)}" width="{w}" height="{h}" fetchpriority="high"></div>
+  body=f'''<main><div class="im"><img src="{media_url(img)}" alt="{E(t)}" width="{w}" height="{h}" fetchpriority="high"></div>
 <div>{crumbs_html(cr)}<h1>{E(t)}</h1><div class="mu">{E((it['line']+' · '+it['cat'] if zh else it['lineEn']+' · '+cen) if kind=='pose' else (cz_ if zh else cen))} · {'编号' if zh else 'No.'} {E(it.get('no') or it['id'])}</div>{tg}
 {boxes}{ang}
 <a class="go" href="/#{kind}/{it['id']}">{'在衣姿中打开' if zh else 'Open in PoseWear'}</a><a class="go" style="background:#111" href="/#studio">{'去试穿' if zh else 'Try on'}</a>{lic}</div>
@@ -146,7 +146,7 @@ for kind,L in [('pose',SP),('costume',SC),('anime',SA),('portrait',SR)]:
     imgs=[a['i'] for a in it['angles']] if kind=='pose' else [it['m']]
     for lang in (['zh','en'] if kind in HAS_EN else ['zh']):
       W(('/en' if lang=='en' else '')+f'/{kind}/{it["id"]}/',detail(lang,kind,it,rel))
-    add(kind,f'/{kind}/{it["id"]}/',LM[kind],[(SITE+'/'+x,zh_title(kind,it)) for x in imgs],en=kind in HAS_EN)
+    add(kind,f'/{kind}/{it["id"]}/',LM[kind],[(media_url(x, absolute=True),zh_title(kind,it)) for x in imgs],en=kind in HAS_EN)
 # ---- 分类 / 标签 / 栏目页 ----
 PER=96
 INTRO={'pose':('{c}姿势参考图，共 {n} 个姿势，每个都有正面、俯拍、仰拍等多个角度，附中文、英文和日文提示词，画画、拍照和 AI 出图都能用。','{c} pose references: {n} poses, each shot from several camera angles, with English prompts for drawing, photography and AI image generation.'),

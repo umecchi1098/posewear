@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cloudflareの準備後、一度だけ実行してフォークに接続情報を登録し、dev の公開を開始する。"""
+"""Cloudflareの準備後、一度だけ実行してフォークに接続情報を登録し、dev プレビューを開始する。"""
 import getpass
 import json
 import os
@@ -57,7 +57,7 @@ def main():
             gh('run', 'watch', str(run['id']), '--repo', REPO, '--interval', '10')
         if datetime.fromisoformat(run['created_at'].replace('Z', '+00:00')) > cutoff:
             gh('run', 'rerun', str(run['id']), '--repo', REPO)
-            print(f"公開を開始しました。進捗: {run['html_url']}")
+            print(f"dev プレビューを開始しました。進捗: {run['html_url']}")
             return
 
     # 初回の準備から30日以上経って再実行できないときは、ファイルを変えないコミットで起動する。
@@ -67,10 +67,10 @@ def main():
     if branch != 'dev' or local != head or remote.removesuffix('.git') not in (
         'https://github.com/' + REPO, 'git@github.com:' + REPO
     ):
-        sys.exit('接続情報は登録済みです。最新の dev を次にpushすると公開されます。')
+        sys.exit('接続情報は登録済みです。最新の dev を次にpushするとプレビューが更新されます。')
     subprocess.run(['git', 'commit', '--allow-empty', '--only', '-m', 'Cloudflare Pagesの初回公開を開始'], check=True)
     subprocess.run(['git', 'push', 'origin', 'HEAD:dev'], check=True)
-    print(f'公開を開始しました。進捗: https://github.com/{REPO}/actions')
+    print(f'dev プレビューを開始しました。進捗: https://github.com/{REPO}/actions')
 
 
 if __name__ == '__main__':

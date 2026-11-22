@@ -8,12 +8,25 @@ from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
 
+def public_request(url, *, origin=None, method='GET'):
+    # 公開確認用のクライアント名を明記し、画像はブラウザーと同じ Origin でも確認する。
+    headers = {'User-Agent': 'PoseWear-Deploy-Check/1.0'}
+    if origin:
+        headers['Origin'] = origin
+    return Request(url, method=method, headers=headers)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--live', action='store_true', help='公開済みの2つのサイトも検証する')
+    parser.add_argument('--live', action='store_true', help='公開したアプリと素材の配信内容も検証する')
     args = parser.parse_args()
     site = os.environ['POSEWEAR_SITE'].rstrip('/')
     assets = os.environ['POSEWEAR_ASSET_HOST'].rstrip('/')
+    media = os.environ.get('POSEWEAR_MEDIA_HOST', '').rstrip('/')
+    build_assets = os.environ.get('POSEWEAR_BUILD_ASSETS') == '1'
+    app_only = bool(media) and not build_assets
+    if build_assets and media != assets:
+        raise SystemExit('素材更新では表示用画像と原寸画像を同じ公開先に配置してください。')
     if not site or not assets or site == assets:
         raise SystemExit('アプリ本体と素材には異なる公開URLを指定してください。')
 
@@ -21,7 +34,8 @@ def main():
     asset_dir = Path('dist-assets')
     # 無料プランの上限をアップロード前に確認する。空ファイルは素材照合時にも区別する。
     files = {}
-    for folder in (app_dir, asset_dir):
+    # アプリ単独ビルドでは、共有画像は以前の公開先にあるため手元の出力に含まれない。
+    for folder in ((app_dir,) if app_only else (app_dir, asset_dir)):
         sizes = {p.relative_to(folder).as_posix(): p.stat().st_size
                  for p in folder.rglob('*') if p.is_file()}
         if not 0 < len(sizes) <= 20_000:
@@ -48,11 +62,14 @@ def main():
     if not maps or not all(loc.text and loc.text.startswith(site + '/') for loc in maps):
         raise SystemExit('サイトマップの公開先が POSEWEAR_SITE と一致しません')
 
-    # サムネイルと原寸は素材サイト、画面で拡大する画像はアプリ本体に配置される。
+    # 素材は新形式ではすべて素材サイトに、旧形式では表示用画像だけアプリ側にある。
     # 深度ポーズは提供元への外部リンクなので、コピーする4つのカタログだけを照合する。
-    samples = [(site, app_script), (site, font), (site, app_dir / 'sitemap.xml')]
+    samples = {site + '/' + p.relative_to(app_dir).as_posix(): p
+               for p in (app_script, font, app_dir / 'sitemap.xml')}
+    shared_samples = set()
     for name in ('poses', 'costumes', 'anime', 'portraits'):
         catalog, = (app_dir / 'assets').glob(f'{name}.*.json')
+        samples[site + '/' + catalog.relative_to(app_dir).as_posix()] = catalog
         items = json.loads(catalog.read_text())
         if not items:
             raise SystemExit(f'{catalog}: カタログに素材がありません')
@@ -61,29 +78,51 @@ def main():
                 for key in ('t', 'o', 'i', 'm'):
                     if key == 'm' and name == 'poses':
                         continue
-                    folder = asset_dir if key in ('t', 'o') else app_dir
+                    # 固定した素材版を使うとき、表示画像のURLはカタログ内に保存される。
+                    # サムネイル・原寸の相対パスには、アプリと同じ素材ホストを補う。
+                    external_media = media and key in ('i', 'm')
                     path = row[key]
-                    if not files[folder].get(path):
+                    if external_media:
+                        if not path.startswith(media + '/'):
+                            raise SystemExit(f'{catalog.name}: 表示用画像の配信先が違います: {path}')
+                        path = path[len(media) + 1:]
+                    if not path or path.startswith('/') or '://' in path or '..' in Path(path).parts:
+                        raise SystemExit(f'{catalog.name}: 素材の相対パスが不正です: {path}')
+                    folder = asset_dir if build_assets or key in ('t', 'o') else app_dir
+                    origin = media if external_media else (assets if folder == asset_dir else site)
+                    if not app_only and not files[folder].get(path):
                         raise SystemExit(f'{catalog.name}: 対応する素材がありません: {folder / path}')
                     if index == 0 and angle == 0:
-                        samples.append((assets if folder == asset_dir else site, folder / path))
+                        url = origin + '/' + path
+                        if app_only:
+                            shared_samples.add(url)
+                        else:
+                            samples[url] = folder / path
         print(f'{name}: {len(items):,} items')
+
+    # ビルドに含まれない画像は、公開前にも各カタログから代表例を照会する。
+    # HEAD なら原寸画像をダウンロードせず、404時のHTML応答とCORS設定も判別できる。
+    for url in sorted(shared_samples):
+        with urlopen(public_request(url, origin=site, method='HEAD'), timeout=30) as response:
+            if not response.headers.get_content_type().startswith('image/'):
+                raise SystemExit(f'共有素材から画像が返りません: {url}')
+            if response.headers.get('Access-Control-Allow-Origin') not in ('*', site):
+                raise SystemExit(f'共有素材のCORS設定でアプリが許可されていません: {url}')
 
     if not args.live:
         return
     # 成功コードだけを返す404フォールバックや古いデプロイを取り違えないよう、実体も照合する。
-    with urlopen(site + '/', timeout=30) as response:
+    with urlopen(public_request(site + '/'), timeout=30) as response:
         if f'/{script_path}' not in response.read().decode():
             raise SystemExit('公開トップページに今回のスクリプトが含まれていません')
-    for origin, path in dict.fromkeys(samples):
-        url = origin + '/' + path.relative_to(asset_dir if origin == assets else app_dir).as_posix()
-        with urlopen(url, timeout=30) as response:
+    for url, path in samples.items():
+        with urlopen(public_request(url), timeout=30) as response:
             if response.read() != path.read_bytes():
                 raise SystemExit(f'配信内容がビルド結果と一致しません: {url}')
 
     # 転送先を指定しない同一サイトからのリクエストは、このFunction内で400のJSONを返す。
     # 画像生成APIの呼び出しが発生しない状態で、Functionsも公開されたことを確かめる。
-    request = Request(site + '/api/proxy', headers={'Origin': site})
+    request = public_request(site + '/api/proxy', origin=site)
     try:
         with urlopen(request, timeout=30):
             raise SystemExit('APIプロキシが入力チェックのエラーを返しませんでした')
