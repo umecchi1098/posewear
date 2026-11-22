@@ -36,7 +36,7 @@ const STYLES=[['keep','照片质感','photorealistic, matching the original phot
 const ANG_EN={'正面':'front view','斜侧':'three-quarter view','侧面':'side profile','俯拍':'high-angle shot looking down','仰拍':'low-angle shot looking up','背面':'back view','下から':'low angle'};
 // 保存済みの手動選択を引き継ぎ、初回や未知の値では英語で送信します。
 const savedPromptLanguage=LS('wbPl');
-const W={mode:LS('wbMode')||'tryon',persons:[],garments:[],poses:[],char:LS('wbChar')||'asia',charTxt:LS('wbCharTxt')||'',style:LS('wbStyle')||'keep',bm:LS('wbBm')||'each',pl:['en','zh','ja'].includes(savedPromptLanguage)?savedPromptLanguage:'en',keepBg:LS('wbKeepBg')??true,busy:null,dirty:false,results:[],ri:0,cmp:true};
+const W={mode:LS('wbMode')||'tryon',persons:[],garments:[],poses:[],char:LS('wbChar')||'asia',charTxt:LS('wbCharTxt')||'',style:LS('wbStyle')||'keep',bm:LS('wbBm')||'each',pl:['en','zh','ja'].includes(savedPromptLanguage)?savedPromptLanguage:'en',keepBg:LS('wbKeepBg')??true,keepBody:LS('wbKeepBody')===true,busy:null,dirty:false,results:[],ri:0,cmp:true};
 // item: {kind:'lib',k,ai?} | {kind:'file',blob,url,name}
 const g0=LS('wbSel')||{};
 // ---------- 工具 ----------
@@ -73,6 +73,12 @@ function poseDesc(p,lang){
  // 同じポーズでもカードと試着で別の角度を選べるため、試着側に保存した角度を使います。
  if(lang=='ja')return `${it.promptJa}（${it.lineJa}、${a.ja}）${/2人|双人/.test(it.line)?'。2人の人数と位置関係を線画に合わせる':''}`;
  return lang=='en'?`${it.en} (${it.lineEn}, ${ANG_EN[a.zh]||a.en||a.zh})${/2人|双人/.test(it.line)?' — a two-person pose: match the number of people and their relative positions':''}`:`${it.zh}（${it.line}，${a.zh}）${/2人|双人/.test(it.line)?'——双人姿势，人数与相对位置需与线稿一致':''}`}
+// 素材ごとの説明はそのまま使い、体の比率だけを人物参照に合わせる指示を加えます。
+const bodyInstructions = {
+ en: "Body proportions: prioritize the person reference. Preserve their head-to-body ratio, relative shoulder and hip widths, and the length and thickness of their torso and limbs. Fit the outfit to their build. Recreate the pose’s orientation, balance and joint angles using their own limb lengths.",
+ ja: "体型：人物参照画像を優先する。元の人物の頭身、肩幅と腰幅のバランス、胴と手足の長さ・太さを保つ。衣装はその人物の体格に合わせて着せる。ポーズは体の向き、重心、関節の曲げ方を読み取り、本人の手足の長さで再現する。",
+ zh: "体型：优先参照人物图。保持原人物的头身比、肩宽与胯宽的比例，以及躯干和四肢的长度与粗细。让服装贴合本人的体型，按本人的四肢长度还原姿势的朝向、重心和关节角度。"
+};
 function compose(poseSet,lang=W.pl){const en=lang=='en',P=W.persons.length,G=W.garments.length,ps=poseSet||W.poses,np=ps.length,sheet=np>1;const style=STYLES.find(s=>s[0]==W.style)||STYLES[0],ch=CHARS.find(c=>c[0]==W.char)||CHARS[0],ex=$('#wbExtra').value.trim();
  const gi=W.garments.map(g=>g.kind=='lib'&&A.ITEMS[g.k]).filter(Boolean);let n=0;const rng=(c)=>{if(!c)return null;const a=n+1,b=n+c;n=b;if(lang=='ja')return a==b?`画像${a}`:`画像${a}～${b}`;return a==b?(en?`image ${a}`:`第 ${a} 张`):(en?`images ${a}–${b}`:`第 ${a}–${b} 张`)};
  const rP=rng(P),rG=rng(G),rS=rng(np);const L=[];
@@ -107,6 +113,7 @@ function compose(poseSet,lang=W.pl){const en=lang=='en',P=W.persons.length,G=W.g
   else if(P)L.push('姿势：保持原照片的姿势、构图和拍摄角度。');
   L.push(`画面：${P&&W.keepBg&&!isGen()?'保留原照片的背景与光线；':''}${style[3]}。衣物垂坠自然，褶皱阴影真实，高细节。不要文字、水印或边框。`);
   if(ex)L.push('补充：'+ex)}
+ if(P&&W.keepBody)L.push(bodyInstructions[lang]);
  return L.join('\n')}
 // 個別生成では各画像に渡す線画が1枚ずつ変わります。確認用の訳も送信時と同じ分け方にします。
 function poseSets(){
@@ -120,10 +127,20 @@ function renderJapanesePreview(){
  output.value=sets.map((set,i)=>(sets.length>1?`【ポーズ${i+1}】\n`:'')+compose(set,'ja')).join('\n\n');
  $('#wbJaNeutral').hidden=isComfy()||!neutralOn()||sets.every(isAdultJob);
 }
+let bodyInstructionActive=false;
 function reprompt(force){
  const input=$('#wbPrompt');
  input.lang=W.pl=='zh'?'zh-CN':W.pl;
+ const useBody=hasPerson()&&W.keepBody;
  if(force||!W.dirty){input.value=compose(isComfy()?poseSets()[0]:undefined);W.dirty=false}
+ else if(bodyInstructionActive!==useBody){
+  // 手編集後は全文を作り直さず、切り替えた設定の行だけを追加・削除します。
+  const instruction=bodyInstructions[W.pl];
+  const lines=input.value.split('\n');
+  if(useBody&&!lines.includes(instruction))input.value+=(input.value?'\n':'')+instruction;
+  if(!useBody)input.value=lines.filter(line=>line!==instruction).join('\n');
+ }
+ bodyInstructionActive=useBody;
  renderJapanesePreview();
 }
 // ---------- 渲染 ----------
@@ -167,6 +184,8 @@ function render(localeOnly=false){
  $('#wbPo').innerHTML=W.poses.length?W.poses.map((p,i)=>pickRow(p,'pose',i)).join(''):`<button class="empty0" data-pick="pose"><span><b>${t('选择姿势（可选）')}</b><small>${t(G?'不选就随机':'不选就保持原姿势')}</small></span></button>`;
  $('#wbBatch').hidden=local||W.poses.length<2;$$('[data-bm]').forEach(b=>b.classList.toggle('on',b.dataset.bm==W.bm));$('#wbAllAng').hidden=!poseEnabled||W.poses.length!=1||!A.ITEMS[(W.poses[0]||{}).k];
  $('#wbStyles').innerHTML=STYLES.map(s=>`<button class="chip ${W.style==s[0]?'on':''}" data-style="${s[0]}">${t(s[1])}</button>`).join('');$('#wbKeepBg').checked=W.keepBg;$('#wbKeepBg').closest('label').hidden=G||!hasPerson();
+ $('#wbKeepBody').checked=W.keepBody;
+ $('#wbKeepBody').closest('label').hidden=!hasPerson();
  $$('[data-pl]').forEach(b=>{
   const selected=b.dataset.pl==W.pl;
   b.classList.toggle('on',selected);b.setAttribute('aria-pressed',String(selected));
@@ -214,6 +233,12 @@ $('#studio').addEventListener('click',e=>{const t=e.target;let b;
  if(b=t.closest('[data-style]')){W.style=b.dataset.style;W.dirtyStyle=1;SV('wbStyle',W.style);render()}
  if(b=t.closest('[data-bm]')){W.bm=b.dataset.bm;SV('wbBm',W.bm);render()}});
 $('#studio').addEventListener('change',e=>{const s=e.target.closest('[data-ang]');if(s){W.poses[+s.dataset.ang].ai=+s.value;render()}if(e.target.id=='wbN')render();if(e.target.id=='wbKeepBg'){W.keepBg=e.target.checked;SV('wbKeepBg',W.keepBg);render()}});
+// 選択は次回も復元し、指示の有無をその場でプロンプトに反映します。
+$('#wbKeepBody').onchange=e=>{
+ W.keepBody=e.target.checked;
+ SV('wbKeepBody',W.keepBody);
+ reprompt();
+};
 $('#wbCharTxt').oninput=e=>{W.charTxt=e.target.value;SV('wbCharTxt',W.charTxt);reprompt()};
 $('#wbAllAng').onclick=()=>{const p=W.poses[0],it=A.ITEMS[p.k];W.poses=it.angles.slice(0,6).map((a,i)=>({kind:'lib',k:p.k,ai:i}));toast('已展开 {count} 个角度',null,{count:W.poses.length});render()};
 $('#wbJaPreview').ontoggle=renderJapanesePreview;

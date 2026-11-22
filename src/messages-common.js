@@ -100,6 +100,7 @@ UI.register({
   "数量": ["Quantity", "生成枚数"],
   "高级设置": ["Advanced settings", "詳細設定"],
   "保留原照片背景与光线": ["Keep the original background and lighting", "元の写真の背景と照明を維持"],
+  "优先保留参考人物的体型": ["Prioritize the reference person’s body proportions", "元の人物の体型を優先"],
   "减少误拦截": ["Reduce false blocks", "誤検知を減らす"],
   "用更中性的描述发送，减少正常穿搭被误判，不改变服装和姿势": ["Send a more neutral description to reduce false blocks while keeping the outfit and pose.", "衣装とポーズを保ったまま、中立的な表現を使って誤検知を減らします。"],
   "补充要求（可选），例如：海边日落、半身构图、手拿咖啡…": ["Additional instructions (optional), e.g. sunset at the beach, waist-up composition, holding coffee…", "追加の要望（任意）。例：夕暮れの海辺、上半身の構図、コーヒーを手に持つ…"],

@@ -329,6 +329,9 @@ async function studio(page) {
   await locale(page, 'ja');
   await page.click('details.adv summary');
   await page.click('[data-pl=zh]');
+  // 人物参照のない初期画面には、体型を指定する操作を表示しません。
+  const bodyToggle = page.locator('#wbKeepBody');
+  assert.equal(await bodyToggle.isVisible(), false);
   const chinesePrompt = await page.inputValue('#wbPrompt');
   assert.match(chinesePrompt, /^根据参考图/);
   await locale(page, 'en');
@@ -341,6 +344,15 @@ async function studio(page) {
   await page.setInputFiles('#wbFile', path.join(fixtures, 'person.png'));
   await page.setInputFiles('#wbGFile', path.join(fixtures, 'mk2.png'));
   await page.click('details.adv summary');
+  await visible(page, '#wbKeepBody');
+  assert.equal(await bodyToggle.isChecked(), false);
+  await visible(page, '#wbG .pick');
+  const originalChinese = await page.inputValue('#wbPrompt');
+  await bodyToggle.check();
+  const withBodyChinese = await page.inputValue('#wbPrompt');
+  assert.match(withBodyChinese, /^体型：/m);
+  await bodyToggle.uncheck();
+  assert.equal(await page.inputValue('#wbPrompt'), originalChinese);
   const custom = 'Local test prompt, light gray cardigan';
   const additional = 'Overcast daylight';
   await page.fill('#wbExtra', additional);
@@ -383,11 +395,14 @@ async function studio(page) {
   status=200;
   await page.click('[data-pl=en]');
   await page.click('#wbReP');
+  await bodyToggle.check();
   const english=await page.inputValue('#wbPrompt');
+  assert.equal(english.split('Body proportions:').length - 1, 1);
   await page.click('#wbJaPreview summary');
   await wait(page,()=>document.querySelector('#wbJaText').value.length>0);
   const japanese=await page.inputValue('#wbJaText');
   assert.match(japanese,/参照画像/);
+  assert.match(japanese,/^体型：/m);
   assert.equal(await page.inputValue('#wbPrompt'),english);
   await page.click('#wbGo');
   await wait(page,()=>!document.querySelector('#wbGo').disabled && !document.querySelector('#wbOutAct').hidden);
@@ -400,9 +415,38 @@ async function studio(page) {
   await page.click('#wbGo');
   await wait(page,()=>!document.querySelector('#wbGo').disabled && !document.querySelector('#wbOutAct').hidden);
   assert.equal(sentBody(5),japanese);
+
+  // 背景維持と誤検知軽減を併用しても、実際に送信する本文に体型の指示が一度だけ残ります。
+  await page.check('#wbNeutral');
+  assert.equal(await page.isChecked('#wbKeepBg'), true);
+  await page.click('#wbGo');
+  await wait(page,()=>!document.querySelector('#wbGo').disabled && !document.querySelector('#wbOutAct').hidden);
+  assert.match(sentBody(6), /カタログ/);
+  assert.match(sentBody(6), /元の背景と照明を保つ/);
+  assert.equal(sentBody(6).split('体型：').length - 1, 1);
+
+  // 切り替え時は手書きの文面を保ち、体型の指示だけを着脱します。
+  await bodyToggle.uncheck();
+  await page.fill('#wbPrompt', custom);
+  await bodyToggle.check();
+  assert.ok((await page.inputValue('#wbPrompt')).includes(custom));
+  assert.match(await page.inputValue('#wbPrompt'), /^体型：/m);
+  await bodyToggle.uncheck();
+  assert.equal(await page.inputValue('#wbPrompt'), custom);
+  await bodyToggle.check();
+  await page.click('#wbPersons [data-rmp]');
+  assert.equal(await bodyToggle.isVisible(), false);
+  assert.equal(await page.inputValue('#wbPrompt'), custom);
   await page.reload();
   await visible(page,'#wbStage');
   assert.match(await page.locator('[data-pl=ja]').getAttribute('class'),/\bon\b/);
+  // 再読み込みで人物写真は解除されます。再度選ぶと保存済みの設定が有効になります。
+  await page.click('#wbAdv summary');
+  assert.doesNotMatch(await page.inputValue('#wbPrompt'), /^体型：/m);
+  await page.setInputFiles('#wbFile', path.join(fixtures, 'person.png'));
+  await visible(page, '#wbKeepBody');
+  assert.equal(await bodyToggle.isChecked(), true);
+  assert.match(await page.inputValue('#wbPrompt'), /^体型：/m);
 }
 
 // APIキーのない状態で、画像と本文を別ページへ実際に貼り付けます。
