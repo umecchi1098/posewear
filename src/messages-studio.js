@@ -2,6 +2,8 @@
 
 // 試着スタジオの表示文言。各項目は英語と日本語の順です。
 window.UI.register({
+  "打包历史图片": ["Download history images as ZIP", "履歴の画像を一括保存"],
+  "无法打包历史图片。": ["Could not create the history ZIP.", "履歴のZIPを作成できませんでした。"],
   "图像模型候选": ["Image model options", "画像モデル候補"],
   "画质": ["Quality", "画質"],
   "规划复杂度": ["Planning complexity", "描画前の検討量"],

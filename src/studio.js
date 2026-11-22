@@ -981,6 +981,18 @@ async function save(rec){
  }catch{/* 古い履歴の整理に失敗しても、今回の画像は保存済みです。 */}
  return true;
 }
+// 保存ボタンを押した時点の履歴を読み、生成画像だけを日時と連番付きでまとめます。
+async function downloadHistory(){
+ const records=await tx('readonly',store=>store.getAll());
+ if(!records.length)return toast('还没有生成记录');
+ const files=records.map((record,index)=>{
+  const extension=record.after.type.split('/')[1]||'png';
+  const name=`posewear-${stamp(new Date(record.t))}-${p2(index+1)}.${extension}`;
+  return {name,blob:record.after};
+ });
+ window.X.dl(await makeZip(files),`posewear-history-${stamp(new Date())}.zip`);
+}
+$('#wbHistZip').onclick=()=>downloadHistory().catch(()=>toast('无法打包历史图片。'));
 let hu=[];
 async function hist(){
  let L=[];
@@ -990,6 +1002,7 @@ async function hist(){
   const u=URL.createObjectURL(r.after);hu.push(u);
   return `<button data-t="${r.t}"><img src="${u}" alt=""><span></span><i data-del="${r.t}" aria-label="">×</i></button>`;
  }).join(''):`<p class="fine"></p>`;
+ $('#wbHistZip').disabled=!L.length;
  W.hist=L;historyText();
 }
 function historyText(){
