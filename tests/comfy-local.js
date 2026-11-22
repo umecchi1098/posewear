@@ -199,6 +199,7 @@ async function main() {
 
     await page.reload();
     await page.locator('#wbHist button').click();
+    await page.click('#wbGalleryUse');
     await page.locator('#wbAfter').waitFor();
     assert.match(await page.locator('#wbMeta').innerText(), /ComfyUI.*try-on-qwen-2509-api/);
     assert.ok(await page.locator('#wbSentD').isHidden());
@@ -319,6 +320,7 @@ async function main() {
     await page.reload();
     await page.waitForFunction(() => document.querySelectorAll('#wbHist [data-t]').length === 7);
     await page.locator('#wbHist [data-t]').nth(2).click();
+    await page.click('#wbGalleryUse');
     assert.match(await page.locator('#wbMeta').innerText(), /Qwen・PEあり/);
     // ポーズをすべて外しても同じ設定を使え、古い第3画像は再送されません。
     while (await page.locator('#wbPo [data-rm]').count()) await page.locator('#wbPo [data-rm]').first().click();
@@ -349,6 +351,7 @@ async function main() {
     assert.notEqual(await page.inputValue('#cfProfile'), directId);
     await page.click('#cfgX');
     await page.locator('#wbHist [data-t]').first().click();
+    await page.click('#wbGalleryUse');
     assert.match(await page.innerText('#wbMeta'), /Qwen・PEなし/);
     await page.click('#wbCfg');
     page.once('dialog', dialog => dialog.accept());

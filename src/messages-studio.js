@@ -2,6 +2,8 @@
 
 // 試着スタジオの表示文言。各項目は英語と日本語の順です。
 window.UI.register({
+  "放大生成图片": ["Enlarge generated image", "生成画像を拡大"],
+  "在工作台显示此结果": ["Show this result in the studio", "この結果を作業画面に表示"],
   "生成设置管理": ["Manage generation settings", "生成設定の管理"],
   "管理生成设置": ["Manage settings", "生成設定を管理"],
   "生成设置": ["Generation setting", "生成設定"],

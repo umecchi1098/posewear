@@ -1006,11 +1006,94 @@ function show(i,history=false){
  W.ri=i;const a=U(r.after),hasB=!!r.before;
  $('#wbAfter').src=a;if(hasB)$('#wbBefore').src=U(r.before);
  $('#wbCmp').hidden=false;$('#wbCmp').classList.toggle('solo',!hasB||!W.cmp);$('#wbCmpT').hidden=!hasB;
- $('#wbPh0').hidden=true;$('#wbErr').hidden=true;$('#wbOutAct').hidden=false;setX(50);$('#wbZip').hidden=W.results.length<2;if(!matchMedia('(prefers-reduced-motion: reduce)').matches){$('#wbAfter').animate([{opacity:0,transform:'scale(1.03)',filter:'blur(8px)'},{opacity:1,transform:'none',filter:'none'}],{duration:620,easing:'cubic-bezier(.16,1,.3,1)'});if(hasB&&W.cmp&&!W._wig){W._wig=1;const t0=performance.now();const f=t=>{const p=(t-t0)/1400;if(p>=1)return setX(50);setX(50+Math.sin(p*Math.PI*2)*12*(1-p));requestAnimationFrame(f)};setTimeout(()=>requestAnimationFrame(f),500)}}
+ $('#wbPh0').hidden=true;$('#wbErr').hidden=true;$('#wbOutAct').hidden=false;setX(50);$('#wbZip').hidden=W.results.length<2;if(!matchMedia('(prefers-reduced-motion: reduce)').matches){$('#wbAfter').animate([{opacity:0,transform:'scale(1.03)',filter:'blur(8px)'},{opacity:1,transform:'none',filter:'none'}],{duration:620,easing:'cubic-bezier(.16,1,.3,1)'});if(hasB&&W.cmp&&!W._wig){W._wig=1;const t0=performance.now();const f=t=>{if(comparisonTouched)return;const p=(t-t0)/1400;if(p>=1)return setX(50);setX(50+Math.sin(p*Math.PI*2)*12*(1-p));requestAnimationFrame(f)};setTimeout(()=>requestAnimationFrame(f),500)}}
  const R=$('#wbRes');R.hidden=W.results.length<2;
  R.innerHTML=W.results.map((x,j)=>`<button data-ri="${j}" class="${j==i?'on':''}"><img src="${U(x.after)}" alt=""></button>`).join('');
  resultText(r);
 }
+// 閲覧位置は作業画面の選択と別に持ちます。画像を送るだけでは作業中の結果を変更しません。
+const gallery = $('#wbGallery');
+const galleryImage = $('#wbGalleryImage');
+const galleryPrev = $('#wbGalleryPrev');
+const galleryNext = $('#wbGalleryNext');
+let galleryRecords = [];
+let galleryIndex = 0;
+let galleryUrl = '';
+
+function displayGalleryImage(index) {
+ if (!galleryRecords[index]) return;
+ galleryIndex = index;
+ // 元の画像データからこの表示専用のURLを作り、前の画像のURLは手放します。
+ if (galleryUrl) URL.revokeObjectURL(galleryUrl);
+ galleryUrl = URL.createObjectURL(galleryRecords[index].after);
+ galleryImage.src = galleryUrl;
+ $('#wbGalleryCount').textContent = (index + 1) + ' / ' + galleryRecords.length;
+ const first = index === 0;
+ const last = index === galleryRecords.length - 1;
+ // 末端で無効になるボタンにフォーカスを残すと、次のキー操作が届かなくなります。
+ const focused = document.activeElement;
+ galleryPrev.disabled = first;
+ galleryNext.disabled = last;
+ if (focused === galleryPrev && first) galleryNext.focus();
+ if (focused === galleryNext && last) galleryPrev.focus();
+}
+galleryImage.onload = () => {
+ // 縦横比から実際に絵が見える大きさを決めると、その外側だけを背景としてクリックできます。
+ galleryImage.style.setProperty('--image-ratio', galleryImage.naturalWidth / galleryImage.naturalHeight);
+};
+function openGallery(records, index, opener, history) {
+ if (!records[index]) return;
+ galleryRecords = records;
+ $('#wbGalleryUse').hidden = !history;
+ $('#wbGalleryNav').hidden = records.length === 1;
+ displayGalleryImage(index);
+ // タッチ操作でも、閉じるときにブラウザーが元のボタンへフォーカスを戻せるようにします。
+ opener.focus({preventScroll:true});
+ gallery.showModal();
+}
+$('#wbGalleryOpen').onclick = event => openGallery(W.results, W.ri, event.currentTarget, false);
+galleryPrev.onclick = () => displayGalleryImage(galleryIndex - 1);
+galleryNext.onclick = () => displayGalleryImage(galleryIndex + 1);
+$('#wbGalleryClose').onclick = () => gallery.close();
+gallery.onclick = event => {
+ if (!event.target.closest('img,button,#wbGalleryNav')) gallery.close();
+};
+gallery.onkeydown = event => {
+ // 背後の画面のショートカットを止め、Esc で閉じる動作はブラウザーに任せます。
+ event.stopPropagation();
+ if (event.key === 'Tab') {
+  // 現在表示されている有効なボタンの中で、前後どちらにも一周できるようにします。
+  const controls = [...gallery.querySelectorAll('button:enabled')].filter(button => button.offsetWidth);
+  const first = controls[0];
+  const last = controls.at(-1);
+  const atBoundary = document.activeElement === (event.shiftKey ? first : last);
+  if (atBoundary || !controls.includes(document.activeElement)) {
+   event.preventDefault();
+   (event.shiftKey ? last : first).focus();
+  }
+ }
+ if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+  event.preventDefault();
+  displayGalleryImage(galleryIndex + (event.key === 'ArrowLeft' ? -1 : 1));
+ }
+};
+gallery.onclose = () => {
+ // close イベントが届く前に再度開いた場合は、新しい画像を片付けないようにします。
+ if (gallery.open) return;
+ galleryImage.removeAttribute('src');
+ URL.revokeObjectURL(galleryUrl);
+ galleryUrl = '';
+ galleryRecords = [];
+};
+$('#wbGalleryUse').onclick = () => {
+ // 履歴の画像を作業に使うと明示したときだけ、その画像をダウンロードや再利用の対象にします。
+ const record = galleryRecords[galleryIndex];
+ gallery.close();
+ W.results = [record];
+ show(0, true);
+ $('#wbGalleryOpen').focus({preventScroll:true});
+ $('#wbStage').scrollIntoView({behavior:'smooth',block:'nearest'});
+};
 $('#wbRes').onclick=e=>{const b=e.target.closest('[data-ri]');b&&show(+b.dataset.ri)};$('#wbCmpT').onclick=()=>{W.cmp=!W.cmp;show(W.ri,fromHistory)};
 $('#wbZip').onclick=async()=>{if(!window.makeZip)return;const ts=stamp(new Date());const fs=W.results.map((r,i)=>({name:`posewear-${r.mode=='gen'?'gen':'tryon'}-${ts}-${String(i+1).padStart(2,'0')}.png`,blob:r.after}));window.X.dl(await makeZip(fs),`posewear-tryon-${ts}.zip`);toast('已打包 {count} 张',null,{count:fs.length})};
 // ComfyUI の設定画面からはローカル接続だけを書き出し、クラウドの接続情報を混ぜません。
@@ -1043,7 +1126,43 @@ $('#cfImpF').onchange=async event=>{
 };
 $('#wbDl').onclick=()=>{const r=W.results[W.ri];if(!r)return;const l=document.createElement('a');l.href=U(r.after);l.download=`posewear-${r.mode=='gen'?'gen':'tryon'}-${stamp(new Date(r.t))}-${String(W.ri+1).padStart(2,'0')}.png`;l.click()};
 $('#wbUse').onclick=async()=>{const r=W.results[W.ri];if(!r)return;const x=await toJpeg(U(r.after),1536);W.persons=[{blob:x.blob,url:URL.createObjectURL(x.blob),w:x.w,h:x.h}];W.mode='tryon';render();toast('已将结果设为新的人物照片')};
-function setX(x){$('#wbCmp').style.setProperty('--x',x+'%');$('#wbRange').value=x}$('#wbRange').oninput=e=>setX(e.target.value);
+const comparisonRange = $('#wbRange');
+let comparisonTouched = false;
+let compareGesture = null;
+
+function setX(value) {
+ $('#wbCmp').style.setProperty('--x', value + '%');
+ comparisonRange.value = value;
+}
+
+// キーボードの矢印による調整はブラウザー標準のスライダー操作を使います。
+comparisonRange.oninput = () => {
+ comparisonTouched = true;
+ setX(comparisonRange.value);
+};
+comparisonRange.onpointerdown = event => {
+ if (!event.isPrimary || event.button !== 0) return;
+ // 標準の範囲入力は押した瞬間に値が変わるため、ドラッグが始まるまで位置を保ちます。
+ event.preventDefault();
+ comparisonTouched = true;
+ comparisonRange.focus({preventScroll:true});
+ comparisonRange.setPointerCapture(event.pointerId);
+ compareGesture = {id:event.pointerId, x:event.clientX, y:event.clientY, dragged:false};
+};
+comparisonRange.onpointermove = event => {
+ if (compareGesture?.id !== event.pointerId) return;
+ if (Math.hypot(event.clientX - compareGesture.x, event.clientY - compareGesture.y) < 5 && !compareGesture.dragged) return;
+ compareGesture.dragged = true;
+ const bounds = comparisonRange.getBoundingClientRect();
+ setX(Math.round(Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)) * 100));
+};
+comparisonRange.onpointerup = event => {
+ if (compareGesture?.id !== event.pointerId) return;
+ const openImage = !compareGesture.dragged;
+ compareGesture = null;
+ if (openImage) openGallery(W.results, W.ri, comparisonRange, false);
+};
+comparisonRange.onlostpointercapture = comparisonRange.onpointercancel = () => { compareGesture = null; };
 // ---------- IndexedDB ----------
 let dbp;const db=()=>dbp||(dbp=new Promise((r,j)=>{const q=indexedDB.open('lk-studio',1);q.onupgradeneeded=()=>q.result.createObjectStore('h',{keyPath:'t'});q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error)}));
 const tx=async(m,f)=>{const d=await db();return new Promise((r,j)=>{const t=d.transaction('h',m),s=t.objectStore('h'),q=f(s);t.oncomplete=()=>r(q&&q.result);t.onerror=()=>j(t.error)})};
@@ -1075,7 +1194,7 @@ async function hist(){
  L.sort((a,b)=>b.t-a.t);hu.forEach(URL.revokeObjectURL);hu=[];
  $('#wbHist').innerHTML=L.length?L.map(r=>{
   const u=URL.createObjectURL(r.after);hu.push(u);
-  return `<button data-t="${r.t}"><img src="${u}" alt=""><span></span><i data-del="${r.t}" aria-label="">×</i></button>`;
+  return `<button data-t="${r.t}" aria-haspopup="dialog"><img src="${u}" alt=""><span></span><i data-del="${r.t}" aria-label="">×</i></button>`;
  }).join(''):`<p class="fine"></p>`;
  $('#wbHistZip').disabled=!L.length;
  W.hist=L;historyText();
@@ -1093,7 +1212,26 @@ function historyText(){
   b.querySelector('[data-del]').setAttribute('aria-label',t('删除'));
  });
 }
-$('#wbHist').onclick=async e=>{const d=e.target.closest('[data-del]');if(d){e.stopPropagation();const rec=(W.hist||[]).find(x=>x.t==d.dataset.del);await tx('readwrite',s=>s.delete(+d.dataset.del));await hist();if(rec)toast('已删除 1 条记录',async()=>{await tx('readwrite',s=>s.put(rec));hist()});return}const b=e.target.closest('[data-t]');if(!b)return;const r=W.hist.find(x=>x.t==b.dataset.t);if(r){W.results=[r];show(0,true);$('#wbStage').scrollIntoView({behavior:'smooth',block:'nearest'})}};
+$('#wbHist').onclick = async event => {
+ const remove = event.target.closest('[data-del]');
+ if (remove) {
+  // 削除はサムネイル内の独立した操作です。ギャラリーを開かず、従来の取り消しを残します。
+  const key = Number(remove.dataset.del);
+  const record = W.hist.find(item => item.t === key);
+  await tx('readwrite', store => store.delete(key));
+  await hist();
+  if (record) toast('已删除 1 条记录', async () => {
+   await tx('readwrite', store => store.put(record));
+   await hist();
+  });
+  return;
+ }
+ const thumbnail = event.target.closest('button[data-t]');
+ if (!thumbnail) return;
+ // 履歴一覧と同じ新しい順で、押されたサムネイルから拡大表示を開始します。
+ const index = W.hist.findIndex(record => record.t === Number(thumbnail.dataset.t));
+ openGallery(W.hist, index, thumbnail, true);
+};
 $('#wbHClr').onclick=async()=>{const all=W.hist||[];if(!all.length)return toast('还没有生成记录');await tx('readwrite',s=>s.clear());await hist();toast('已清空 {count} 条记录',async()=>{await tx('readwrite',s=>{all.forEach(r=>s.put(r))});hist()},{count:all.length})};
 // ---------- 对外 ----------
 let inited=false;async function init(){if(inited)return;inited=true;const gk=[].concat(g0.g||[]),pk=(g0.p||[]).filter(x=>Array.isArray(x));const need=[gk.length&&'costume',gk.some(k=>k[0]=='a')&&'anime',pk.length&&'pose'].filter(Boolean);if(need.length)await Promise.all(need.map(A.load)).catch(()=>{});

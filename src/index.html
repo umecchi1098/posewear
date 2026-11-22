@@ -36,7 +36,7 @@
 </aside>
 <main class="st-c"><div class="onb" id="wbOnb" hidden><div class="onb-i"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9m-3 3 3 3m-6 0 2 2"/></svg></div><b>通过 API 生成</b><button class="pri sm" id="wbOnbGo">设置 API</button></div>
 <div class="stage" id="wbStage"><div class="ph0" id="wbPh0"><div class="ill"><i class="c1">人物</i><em>+</em><i class="c2">服装</i><em>→</em><i class="c3">结果</i></div><span>结果会显示在这里</span><p>选好人物和服装后点「生成」</p></div>
-<div class="cmp" id="wbCmp" hidden><img id="wbAfter" alt="生成结果"><div class="bef" id="wbBefW"><img id="wbBefore" alt="原始照片"></div><div class="hdl" id="wbHdl"><span></span></div><input type="range" id="wbRange" min="0" max="100" value="50" aria-label="前后对比"><em class="l">原图</em><em class="r">结果</em></div>
+<div class="cmp" id="wbCmp" hidden><button id="wbGalleryOpen" type="button" aria-label="放大生成图片" aria-haspopup="dialog" title="放大生成图片"><img id="wbAfter" alt="生成结果"></button><div class="bef" id="wbBefW"><img id="wbBefore" alt="原始照片"></div><div class="hdl" id="wbHdl"><span></span></div><input type="range" id="wbRange" min="0" max="100" value="50" aria-label="前后对比"><em class="l">原图</em><em class="r">结果</em></div>
 <div class="busy" id="wbBusy" hidden><div class="skel0"></div><div class="bar0"><i id="wbProg"></i></div><b id="wbStage1">正在上传素材…</b><small id="wbTime">0 秒</small><button class="sm ghost" id="wbStop">取消</button></div>
 <div class="err" id="wbErr" hidden></div></div>
 <div class="warn" id="wbWarn" hidden></div>
@@ -56,6 +56,20 @@
 </div>
 </aside>
 </div></section>
+
+<!-- 画像と操作ボタンを別の行に置き、縦長の画像にもボタンが重ならないようにします。 -->
+<dialog id="wbGallery" data-ui-section aria-label="大图预览">
+ <div class="gallery-tools"><button id="wbGalleryClose" class="icon" type="button" autofocus aria-label="关闭">✕</button></div>
+ <div class="gallery-frame"><img id="wbGalleryImage" alt="生成结果"></div>
+ <div class="gallery-actions">
+  <div id="wbGalleryNav">
+   <button id="wbGalleryPrev" class="icon" type="button" aria-label="上一张">‹</button>
+   <span id="wbGalleryCount" role="status"></span>
+   <button id="wbGalleryNext" class="icon" type="button" aria-label="下一张">›</button>
+  </div>
+  <button id="wbGalleryUse" type="button">在工作台显示此结果</button>
+ </div>
+</dialog>
 
 <dialog id="wbLimit" data-ui-section aria-labelledby="wbLimitTitle" aria-describedby="wbLimitText">
  <h2 id="wbLimitTitle">生成历史将超过上限</h2>

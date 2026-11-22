@@ -49,7 +49,7 @@ for(const prov of ['openai','gemini','seedream','custom']){hits=[];mode='ok';con
   const nr=await p.evaluate(()=>document.querySelectorAll('#wbRes > *').length);R.push(['multi 3',nr>=3,'res thumbs '+nr+' hist '+s.hist]);
   const [d]=await Promise.all([p.waitForEvent('download',{timeout:8000}),p.click('#wbZip')]).catch(e=>[null]);R.push(['zip',!!d,d&&d.suggestedFilename()]);
   const h0=s.hist;await p.hover('#wbHist [data-t]');await p.click('#wbHist [data-del]');await p.waitForTimeout(300);let h1=(await st(p)).hist;await p.click('#toast button');await p.waitForTimeout(400);let h2=(await st(p)).hist;R.push(['hist del+undo',h1==h0-1&&h2==h0,`${h0}->${h1}->${h2}`]);
-  await p.click('#wbHist [data-t]:nth-child(3)');await p.waitForTimeout(300);R.push(['hist reuse',/·/.test(await p.$eval('#wbMeta',e=>e.innerText)),await p.$eval('#wbMeta',e=>e.innerText)]);
+  await p.click('#wbHist [data-t]:nth-child(3)');await p.click('#wbGalleryUse');await p.waitForTimeout(300);R.push(['hist reuse',/·/.test(await p.$eval('#wbMeta',e=>e.innerText)),await p.$eval('#wbMeta',e=>e.innerText)]);
   await p.$eval('#wbHist',e=>e.scrollIntoView({block:'center'}));await p.screenshot({path:S+'d-history.png'});
   await p.click('#wbHClr');await p.waitForTimeout(300);h1=(await st(p)).hist;await p.click('#toast button');await p.waitForTimeout(400);h2=(await st(p)).hist;R.push(['hist clear+undo',h1==0&&h2==h0,`${h0}->${h1}->${h2}`]);
   await p.evaluate(()=>{document.querySelector('#cfg').hidden=false});await p.waitForTimeout(300);await p.screenshot({path:S+'d-settings.png'});}
