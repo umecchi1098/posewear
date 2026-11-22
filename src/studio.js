@@ -768,6 +768,37 @@ const COMFY_STAGES={
  waiting:'正在等待 ComfyUI 结果…',
  downloading:'正在下载 ComfyUI 结果…'
 };
+const HISTORY_LIMIT=40;
+const limitDialog=$('#wbLimit');
+limitDialog.addEventListener('keydown',event=>event.stopPropagation());
+// 保存ボタンはダイアログを閉じないので、保存した後も生成するかどうかを選べます。
+$('#wbLimitZip').onclick=async()=>{
+ const status=$('#wbLimitStatus');
+ try{
+  await downloadHistory();
+  status.textContent=t('已开始下载历史图片。');
+ }catch{
+  status.textContent=t('无法打包历史图片。');
+ }
+};
+async function confirmHistorySpace(planned){
+ // クリック直後に前回のエラーを閉じ、件数を調べている間も二重送信を防ぎます。
+ $('#wbErr').hidden=true;$('#wbWarn').hidden=true;
+ $('#wbBusy').hidden=false;$('#wbGo').disabled=true;
+ stage('正在检查历史记录…');
+ // ほかのタブでの変更も含めます。保存領域を読めない環境では表示中の履歴を使います。
+ const current=await tx('readonly',store=>store.count()).catch(()=>W.hist?.length||0);
+ if(W.busy.signal.aborted)return false;
+ const removed=current+planned-HISTORY_LIMIT;
+ if(removed<=0)return true;
+ $('#wbBusy').hidden=true;
+ $('#wbLimitText').textContent=t('现有 {current} 条记录。如果计划生成的 {planned} 张图片全部保存，最早的 {removed} 条记录将被删除。',{current,planned,removed});
+ $('#wbLimitStatus').textContent='';
+ // Escで閉じたとき、前回の「生成を続ける」が選択結果に残らないようにします。
+ limitDialog.returnValue='';
+ limitDialog.showModal();
+ return new Promise(resolve=>limitDialog.addEventListener('close',()=>resolve(limitDialog.returnValue==='generate'),{once:true}));
+}
 async function runComfy(){
  if(!hasPerson())return toast('请先上传人物照片');
  if(!W.garments.length)return toast('请先选择服装');
@@ -787,9 +818,10 @@ async function runComfy(){
  }));
  // 繰り返し出力はジョブごとに異なるシードを使います。1枚だけならグラフの値を保ちます。
  const firstSeed=mapping.seed&&sets.length*count>1?crypto.getRandomValues(new Uint32Array(1))[0]:undefined;
- W.busy=ac;done=0;total=sets.length*count;
+ W.busy=ac;
+ if(!await confirmHistorySpace(sets.length*count)){W.busy=null;busy(false);return}
+ done=0;total=sets.length*count;
  let savedAny=false,saveFailed=false;
- $('#wbErr').hidden=true;$('#wbWarn').hidden=true;
  busy(true);stage('正在准备素材…');
  try{
   const garment=await assetBlob(reference,ac.signal),jobs=[];
@@ -847,7 +879,7 @@ async function runComfy(){
  }
 }
 async function run(){if(W.busy)return;if(isComfy())return runComfy();if(!cfg.key){toast('请先配置你的 API');return cfgOpen()}const need=missingReference();if(need)return toast(need);
- const ac=new AbortController();W.busy=ac;$('#wbErr').hidden=true;$('#wbWarn').hidden=true;
+ const ac=new AbortController();W.busy=ac;
  // 非同期の画像読み込みが始まる前に、表示中の送信言語と本文を画像ごとに確定します。
  const n=+$('#wbN').value||1,jobs=[],pl=W.pl,edited=W.dirty?$('#wbPrompt').value.trim():'';
  for(const set of poseSets()){
@@ -855,6 +887,7 @@ async function run(){if(W.busy)return;if(isComfy())return runComfy();if(!cfg.key
   const prompt=soft?neutralize(prompt0,pl):prompt0;
   for(let i=0;i<n;i++)jobs.push({set,prompt0,soft,prompt});
  }
+ if(!await confirmHistorySpace(jobs.length)){W.busy=null;busy(false);return}
  done=0;total=jobs.length;busy(true);stage('正在准备素材…');const errs=[],warns=new Set(),got=[];
  try{const pb=W.persons.map(p=>p.blob),gb=await Promise.all(W.garments.map(g=>assetBlob(g,ac.signal))),cache=new Map();const poseB=async p=>{const key=p.k+':'+p.ai;if(!cache.has(key))cache.set(key,assetBlob(p,ac.signal));return cache.get(key)};
   stage(total>1?'模型正在绘制… 共 {count} 张':'模型正在绘制…',{count:total});
@@ -977,7 +1010,7 @@ async function save(rec){
  try{await tx('readwrite',s=>s.put(rec))}catch{return false}
  try{
   const all=await tx('readonly',s=>s.getAllKeys());
-  if(all.length>40)await tx('readwrite',s=>{all.slice(0,all.length-40).forEach(k=>s.delete(k))});
+  if(all.length>HISTORY_LIMIT)await tx('readwrite',s=>{all.slice(0,all.length-HISTORY_LIMIT).forEach(k=>s.delete(k))});
  }catch{/* 古い履歴の整理に失敗しても、今回の画像は保存済みです。 */}
  return true;
 }

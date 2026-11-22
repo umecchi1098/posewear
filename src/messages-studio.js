@@ -2,6 +2,11 @@
 
 // 試着スタジオの表示文言。各項目は英語と日本語の順です。
 window.UI.register({
+  "生成历史将超过上限": ["Generation history limit", "生成履歴が上限を超えます"],
+  "现有 {current} 条记录。如果计划生成的 {planned} 张图片全部保存，最早的 {removed} 条记录将被删除。": ["Your history has {current} images. If all {planned} new images are saved, the oldest {removed} will be deleted.", "現在の履歴は{current}件です。予定の{planned}枚がすべて保存されると、古い{removed}件が履歴から削除されます。"],
+  "正在检查历史记录…": ["Checking history…", "履歴を確認中…"],
+  "继续生成": ["Continue generating", "生成を続ける"],
+  "已开始下载历史图片。": ["History ZIP download started.", "履歴のZIPのダウンロードを開始しました。"],
   "打包历史图片": ["Download history images as ZIP", "履歴の画像を一括保存"],
   "无法打包历史图片。": ["Could not create the history ZIP.", "履歴のZIPを作成できませんでした。"],
   "图像模型候选": ["Image model options", "画像モデル候補"],

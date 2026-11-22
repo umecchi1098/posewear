@@ -27,7 +27,7 @@ Pose, outfit and portrait reference galleries with prompts in English, Japanese 
 - **Search and filters**: search by Chinese, English or Japanese titles, filter by category, sort, or pick a random image. Each item has its own static page for sharing.
 - **Try-on studio**: upload a photo, pick an outfit and a pose, then generate. You can also generate without a photo. It supports several outputs per run, a before/after slider, and single or zip download.
 - **Copy for chat**: copy each numbered reference image and the final prompt from one screen. You can also download each image. Copying and downloading work without an API key.
-- **Generation history**: stored locally in IndexedDB. You can view, delete or clear items, and undo.
+- **Generation history**: stored locally in IndexedDB. Download all saved result images in one ZIP. If a run would take the history above 40 images, you can save the ZIP, continue, or cancel before generation starts. You can also view, delete or clear saved items and undo deletions.
 - **Clear errors**: an invalid key, a rate limit, a timeout or a safety block each get their own message and a suggested next step.
 - **Reduce false safety blocks**: on by default. The studio rewrites its prompt into a neutral e-commerce try-on description without changing the outfit or pose. Turn it off to send the prompt as is.
 - Favorites, recent items and prompt combos, all stored locally; an 18+ toggle with age confirmation; PWA and offline support; dark mode; a Simplified Chinese, English and Japanese interface. Choose the display language in the header. Prompts default to English. In the studio, open the Japanese preview to check the wording while keeping English selected for generation.

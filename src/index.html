@@ -57,6 +57,16 @@
 </aside>
 </div></section>
 
+<dialog id="wbLimit" data-ui-section aria-labelledby="wbLimitTitle" aria-describedby="wbLimitText">
+ <h2 id="wbLimitTitle">生成历史将超过上限</h2>
+ <p id="wbLimitText"></p>
+ <p id="wbLimitStatus" class="fine" role="status"></p>
+ <form method="dialog" class="row">
+  <button id="wbLimitZip" type="button">打包历史图片</button>
+  <button id="wbLimitCancel" value="cancel" autofocus>取消</button>
+  <button id="wbLimitGo" value="generate" class="pri">继续生成</button>
+ </form>
+</dialog>
 <dialog id="wbChat" data-ui-section aria-labelledby="wbChatTitle">
  <header class="chat-header">
   <h2 id="wbChatTitle">复制到聊天</h2>
