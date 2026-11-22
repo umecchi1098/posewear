@@ -18,7 +18,7 @@ def put(name,data):
 put('poses.json',PJ);put('costumes.json',CJ);put('anime.json',AJ);put('portraits.json',RJ);put('depths.json',DJ)
 # 翻訳辞書もキャッシュの版に含め、更新後に古い辞書が残らないようにします。
 ui_files=['ui.js','messages-common.js','messages-gallery.js','messages-studio.js']
-static_files=['style.css',*ui_files,'zip.js','extras.js','comfy.js','comfy-workflows.js','studio.js']
+static_files=['style.css',*ui_files,'zip.js','extras.js','comfy.js','comfy-workflows.js','generation-settings.js','studio.js']
 for f in static_files: put(f,open(f'src/{f}','rb').read())
 # フォントの内容が変わると CSS とキャッシュの URL も変わる。ライセンスも同じサイトで配信する。
 font_name='noto-sans-jp.woff2'

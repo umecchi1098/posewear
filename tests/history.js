@@ -47,7 +47,7 @@ async function main() {
       await route.fulfill({ json: { data: [{ b64_json: otherImage.toString('base64') }] } });
     });
     await page.addInitScript(() => {
-      if (!localStorage.wbCfg) {
+      if (!localStorage.wbCfg && !localStorage.wbGenerationSettings) {
         localStorage.wbCfg = JSON.stringify({ prov: 'openai', key: 'sk-history-test', proxy: true });
       }
     });
@@ -191,6 +191,8 @@ async function main() {
     });
     const workflow = require('../workflows/posewear-qwen21-pose-no-pe-api.json');
     await page.evaluate(({ base, workflow }) => {
+      // 旧版の保存状態から ComfyUI を移行するブラウザーを再現します。
+      localStorage.removeItem('wbGenerationSettings');
       localStorage.wbCfg = JSON.stringify({ prov: 'comfy' });
       localStorage.wbComfy = JSON.stringify({ version: 1, base, activeId: 'test', workflows: [{
         id: 'test', name: '履歴回帰用ワークフロー', fileName: 'test.json', workflow,

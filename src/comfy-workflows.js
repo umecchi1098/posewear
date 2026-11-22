@@ -100,5 +100,6 @@
 
   const replace = state => persist(fromBackup(state));
 
-  window.ComfyWorkflows = {load, active, save, select, remove, replace};
+  // 新形式の設定でも、従来の JSON とノード割り当てを同じ基準で検証します。
+  window.ComfyWorkflows = {load, active, save, select, remove, replace, fromBackup, profile};
 })();

@@ -21,12 +21,19 @@
   function normalizeBase(base) {
     // URL の正規化で別表記の IP やユーザー情報が隠れる前に、入力を確認します。
     const value = typeof base === 'string' ? base.trim() : '';
-    if (!/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]{1,5})?\/?$/i.test(value)) {
+    const address = /^https?:\/\/(localhost|\[::1\]|(?:\d{1,3}\.){3}\d{1,3})(?::[0-9]{1,5})?\/?$/i.exec(value);
+    if (!address) {
       throw error('invalidBase');
     }
     try {
       const url = new URL(value);
-      if (url.port === '0') throw error('invalidBase');
+      // 同じPCのほか、利用者が指定したLAN内のPCにも画像を直接送れます。
+      // IPの省略・別表記は受け付けず、インターネット上の接続先も除外します。
+      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+      const privateIPv4 = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(url.hostname);
+      if (url.port === '0' || address[1].toLowerCase() !== url.hostname || !(loopback || privateIPv4)) {
+        throw error('invalidBase');
+      }
       return url.origin;
     } catch {
       throw error('invalidBase');

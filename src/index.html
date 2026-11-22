@@ -45,7 +45,7 @@
 </main>
 <aside class="st-r">
 <button id="wbCfg" class="cfg"><span class="dot" id="wbDot"></span><span id="wbProv">未配置 API</span><b>设置</b></button>
-<div id="wbWorkflowControls" hidden><label class="fld" id="wbWorkflowWrap">试穿工作流<select id="wbWorkflow"></select></label><button type="button" class="sm ghost" id="wbWorkflowManage">管理工作流</button></div>
+<div id="wbWorkflowControls" hidden><label class="fld" id="wbWorkflowWrap">生成设置<select id="wbWorkflow"></select></label><button type="button" class="sm ghost" id="wbWorkflowManage">管理生成设置</button></div>
 <div class="flow"><span data-f="1">人物</span><i>›</i><span data-f="2">服装</span><i id="wbPoseSep">›</i><span data-f="3">姿势</span><i>›</i><span data-f="4">生成</span></div>
 <div id="wbQuick" class="quick"><div class="lab0" id="wbStyleLabel">风格</div><div class="chips" id="wbStyles"></div><div class="row q2"><div class="row"><label class="lab" id="wbARWrap">画幅<select id="wbAR"><option value="auto">自动</option><option value="2:3">竖 2:3</option><option value="3:4">竖 3:4</option><option value="9:16">竖 9:16</option><option value="1:1">方 1:1</option><option value="4:3">横 4:3</option><option value="16:9">横 16:9</option></select></label><label class="lab" id="wbNWrap">数量<select id="wbN"><option>1</option><option>2</option><option>3</option><option>4</option></select></label></div></div></div>
 <details id="wbAdv" class="adv"><summary>高级设置</summary><div class="adv-b"><label class="tg mt"><input type="checkbox" id="wbKeepBg"><span><b>保留原照片背景与光线</b></span></label><label class="tg mt"><input type="checkbox" id="wbKeepBody"><span><b>优先保留参考人物的体型</b></span></label><label class="tg mt"><input type="checkbox" id="wbNeutral"><span><b>减少误拦截</b><small>用更中性的描述发送，减少正常穿搭被误判，不改变服装和姿势</small></span></label><textarea id="wbExtra" rows="2" placeholder="补充要求（可选），例如：海边日落、半身构图、手拿咖啡…"></textarea><div class="row"><div class="seg sm" role="group" aria-label="提示词语言"><button data-pl="en">英文</button><button data-pl="zh">中文</button><button data-pl="ja" lang="ja" translate="no">日本語</button></div><span class="sp"></span><button class="sm ghost" id="wbCopyP">复制</button><button class="sm ghost" id="wbReP">重置</button></div><textarea id="wbPrompt" rows="8" aria-label="最终提示词"></textarea><details id="wbJaPreview"><summary>查看日语译文</summary><textarea id="wbJaText" rows="7" lang="ja" aria-label="日语译文" readonly></textarea><small id="wbJaNeutral" class="fine" hidden>译文对应上方原始提示词，发送时会应用中性措辞设置。</small></details></div></details>
@@ -83,33 +83,33 @@
 </dialog>
 
 <div id="pk" data-ui-section hidden role="dialog" aria-modal="true" aria-label="选择素材"><div class="pk-box"><div class="pk-h"><b id="pkT">选择服装</b><input id="pkQ" type="search" placeholder="搜索…" autocomplete="off"><button class="sm pri" id="pkDone" hidden>完成</button><button class="icon" id="pkX" aria-label="关闭">✕</button></div><div class="pk-g" id="pkG"></div></div></div>
-<div id="cfg" data-ui-section hidden role="dialog" aria-modal="true" aria-labelledby="cfgT"><div class="cfg-box"><div class="pk-h"><b id="cfgT">API 设置</b><button class="icon" id="cfgX" aria-label="关闭">✕</button></div>
+<div id="cfg" data-ui-section hidden role="dialog" aria-modal="true" aria-labelledby="cfgT"><div class="cfg-box">
+<div class="pk-h"><b id="cfgT">生成设置管理</b><button class="icon" id="cfgX" aria-label="关闭">✕</button></div>
 <div class="cfg-b">
-<div class="grp">服务商</div><div class="prov" role="radiogroup" aria-label="服务商"><label><input type="radio" name="prov" value="openai"><span><i class="lg" style="background:#111">O</i><b>OpenAI</b><small>gpt-image-1 · edits</small></span></label><label><input type="radio" name="prov" value="gemini"><span><i class="lg" style="background:#4f7cff">G</i><b>Gemini</b><small>Nano Banana</small></span></label><label><input type="radio" name="prov" value="seedream"><span><i class="lg" style="background:#ff6a00">豆</i><b>豆包 Seedream</b><small>火山方舟 · 国内直连</small></span></label><label><input type="radio" name="prov" value="custom"><span><i class="lg" style="background:#7a7a7a">中</i><b>自定义中转</b><small>OpenAI 兼容</small></span></label><label><input type="radio" name="prov" value="comfy"><span><i class="lg" style="background:#374151">C</i><b>ComfyUI</b><small>本地试穿</small></span></label></div>
+<section class="settings-section" aria-labelledby="cfConnectionTitle">
+<h3 id="cfConnectionTitle">连接设置</h3>
+<div class="setting-controls"><select id="cfConnection" aria-label="选择连接"></select><button id="cfConnectionNew" class="sm" type="button">添加连接</button></div>
+<label class="fld">连接名称<input id="cfConnectionName" autocomplete="off"></label>
+<div class="grp">服务商</div><div class="prov" role="radiogroup" aria-label="服务商"><label><input type="radio" name="prov" value="openai"><span><i class="lg" style="background:#111">O</i><b>OpenAI</b></span></label><label><input type="radio" name="prov" value="gemini"><span><i class="lg" style="background:#4f7cff">G</i><b>Gemini</b><small>Nano Banana</small></span></label><label><input type="radio" name="prov" value="seedream"><span><i class="lg" style="background:#ff6a00">豆</i><b>豆包 Seedream</b><small>火山方舟 · 国内直连</small></span></label><label><input type="radio" name="prov" value="custom"><span><i class="lg" style="background:#7a7a7a">中</i><b>自定义中转</b><small>OpenAI 兼容</small></span></label><label><input type="radio" name="prov" value="comfy"><span><i class="lg" style="background:#374151">C</i><b>ComfyUI</b><small>本地试穿</small></span></label></div>
 
+<label class="fld">Base URL<input id="cfBase" placeholder="https://api.openai.com" spellcheck="false"></label>
+<div class="fld" id="cfKeyW"><label for="cfKey">API Key</label><span class="kw"><input id="cfKey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false"><button class="sm ghost" id="cfEye" type="button">显示</button><button class="sm ghost" id="cfClr" type="button">清除密钥</button></span></div>
 <p class="fine" id="cfHelp"></p>
-<div id="cfCloud" style="display:contents"><div class="grp">连接</div><label class="fld">Base URL<input id="cfBase" placeholder="https://api.openai.com" spellcheck="false"></label>
-<label class="fld">API Key<span class="kw"><input id="cfKey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false"><button class="sm ghost" id="cfEye" type="button">显示</button></span></label>
-<label class="fld">模型<input id="cfModel" list="cfModels" spellcheck="false"><datalist id="cfModels"></datalist></label>
+<label class="fld" id="cfProtoW">接口协议<select id="cfProto"><option value="edits">images/edits · multipart（OpenAI 官方格式）</option><option value="json">images/generations · JSON 多图（多数中转 / gpt-image-2）</option></select></label><label class="fld" id="cfFieldW">图片字段名<select id="cfField"><option value="image[]">image[]（官方，多图）</option><option value="image">image（部分中转）</option></select></label>
+<label id="cfProxyW" class="tg"><input type="checkbox" id="cfProxy"><span><b>通过本站代理转发</b><small>中转不支持跨域（CORS）时再打开。只转发，不保存。自定义中转总是经本站转发。</small></span></label>
+<div class="setting-actions"><button class="sm ghost" id="cfConnectionDelete" hidden>删除连接</button><span class="sp"></span><button class="sm" id="cfTest">测试连接</button><button class="pri sm" id="cfConnectionSave">保存连接</button></div>
+</section>
+<section class="settings-section" id="cfProfileSection" aria-labelledby="cfProfileTitle" hidden>
+<h3 id="cfProfileTitle">生成设置</h3>
+<div class="setting-controls"><select id="cfProfile" aria-label="选择生成设置"></select><button id="cfProfileNew" class="sm" type="button">添加生成设置</button></div>
+<label class="fld">生成设置名称<input id="cfProfileName" autocomplete="off"></label>
+<div id="cfCloud" class="settings-fields"><label class="fld">模型<input id="cfModel" list="cfModels" spellcheck="false"><datalist id="cfModels"></datalist></label>
 <div class="fld" id="cfOpenAIList" hidden><select id="cfOpenAIModels" size="4" aria-label="图像模型候选" translate="no"></select></div>
 <p class="fine" id="cfModelStatus" role="status" hidden></p>
-<label class="fld" id="cfQualityW" hidden>画质<input id="cfQuality" list="cfQualities" placeholder="模型默认值" spellcheck="false"><datalist id="cfQualities"><option value="auto"></option><option value="low"></option><option value="medium"></option><option value="high"></option><option value="xhigh"></option><option value="max"></option></datalist></label>
-<label class="fld" id="cfComplexityW" hidden>规划复杂度<input id="cfComplexity" list="cfComplexities" placeholder="模型默认值" spellcheck="false"><datalist id="cfComplexities"><option value="low"></option><option value="medium"></option><option value="high"></option></datalist></label>
-<div class="grp">高级</div><label class="fld" id="cfProtoW">接口协议<select id="cfProto"><option value="edits">images/edits · multipart（OpenAI 官方格式）</option><option value="json">images/generations · JSON 多图（多数中转 / gpt-image-2）</option></select></label><label class="fld" id="cfFieldW">图片字段名<select id="cfField"><option value="image[]">image[]（官方，多图）</option><option value="image">image（部分中转）</option></select></label>
-<label class="tg"><input type="checkbox" id="cfProxy"><span><b>通过本站代理转发</b><small>中转不支持跨域（CORS）时再打开。只转发，不保存。自定义中转总是经本站转发。</small></span></label>
-<div class="note"><b>密钥</b>只存在这个浏览器里，请求直接发给你填的地址。用公共电脑记得清除。</div></div>
-<p class="fine" id="cfMsg" aria-live="polite"></p>
+<div class="optional-setting" id="cfQualityW" hidden><label class="fld">画质<input id="cfQuality" list="cfQualities" placeholder="模型默认值" spellcheck="false"><datalist id="cfQualities"><option value="auto"></option><option value="low"></option><option value="medium"></option><option value="high"></option><option value="xhigh"></option><option value="max"></option></datalist></label><button aria-label="将画质恢复为模型默认值" id="cfQualityReset" class="sm ghost" type="button">恢复模型默认值</button></div>
+<div class="optional-setting" id="cfComplexityW" hidden><label class="fld">规划复杂度<input id="cfComplexity" list="cfComplexities" placeholder="模型默认值" spellcheck="false"><datalist id="cfComplexities"><option value="low"></option><option value="medium"></option><option value="high"></option></datalist></label><button aria-label="将规划复杂度恢复为模型默认值" id="cfComplexityReset" class="sm ghost" type="button">恢复模型默认值</button></div>
 </div>
-<div class="cfg-f" id="cfCloudFooter"><button class="ghost sm" id="cfClr">清除密钥</button><button class="ghost sm" id="cfExp">导出</button><button class="ghost sm" id="cfImp">导入</button><input type="file" id="cfImpF" accept=".json" hidden><span class="sp"></span><button class="sm" id="cfTest">测试连接</button><button class="pri sm" id="cfSave">保存</button></div></div></div>
-<div id="comfyManager" data-ui-section hidden role="dialog" aria-modal="true" aria-labelledby="comfyManagerTitle">
-<div class="cfg-box"><div class="pk-h"><b id="comfyManagerTitle">ComfyUI 工作流管理</b><span class="sp"></span><button type="button" class="sm ghost" id="cfComfyProviders">服务商</button><button type="button" class="icon" id="cfComfyX" aria-label="关闭">✕</button></div>
-<div class="cfg-b" id="cfComfy">
-<label class="fld">ComfyUI 地址<input id="cfComfyBase" type="url" placeholder="http://127.0.0.1:8188" autocomplete="off" spellcheck="false"></label>
-<div class="comfy-workflows">
-<label class="fld" id="cfComfySavedWrap">已注册的工作流<select id="cfComfySaved"></select></label>
-<div class="row"><button type="button" class="sm" id="cfComfyNew">添加工作流</button><button type="button" class="sm ghost" id="cfComfyDelete" hidden>删除工作流</button></div>
-<label class="fld">工作流名称<input id="cfComfyProfileName" autocomplete="off"></label>
-<div class="fld">
+<div id="cfComfy" class="settings-fields" hidden><div class="fld">
 <span id="cfComfyFileLabel">工作流 API JSON</span>
 <div class="comfy-file" role="group" aria-labelledby="cfComfyFileLabel">
 <label class="sm comfy-file-picker">选择文件<input class="vh" id="cfComfyWorkflow" type="file" accept=".json,application/json" aria-describedby="cfComfyName"></label>
@@ -132,12 +132,11 @@
 <label class="fld">画幅节点（可选）<select id="cfComfyAspect"></select></label>
 <label class="fld">种子节点（可选）<select id="cfComfySeed"></select></label>
 </div>
+</div></div>
+<div class="setting-actions"><button id="cfDelete" class="sm ghost" type="button" hidden>删除生成设置</button><span class="sp"></span><button class="sm" id="cfSave">保存</button><button class="pri sm" id="cfUse">选用</button></div>
+</section>
 </div>
-</div>
-
-<p class="fine" id="cfComfyMsg" aria-live="polite"></p>
-</div>
-<div class="cfg-f"><button class="ghost sm" id="cfComfyExport">导出</button><button class="ghost sm" id="cfComfyImport">导入</button><span class="sp"></span><button class="sm" id="cfComfyTest">测试连接</button><button class="sm" id="cfComfySave">保存</button><button class="pri sm" id="cfComfyUse">选用</button></div></div></div>
+<div class="cfg-f"><p class="fine" id="cfMsg" role="status"></p><span class="sp"></span><button class="ghost sm" id="cfExp">导出</button><button class="ghost sm" id="cfImp">导入</button><input type="file" id="cfImpF" accept=".json" hidden></div></div></div>
 <aside id="tray" data-ui-section hidden aria-label="组合提示词"><div class="tray-h"><b>组合提示词</b><small id="trayN"></small><span class="sp"></span><div class="seg sm"><button data-tl="en">英文</button><button data-tl="ja">日文</button><button data-tl="zh">中文</button></div><button id="trayMin" class="ghost sm">收起</button></div><div class="tray-b"><div class="tray-items" id="trayItems"></div><pre id="trayText"></pre>
 <div class="tray-act"><button id="trayCopy" class="pri">复制提示词</button><button id="trayClear" class="ghost">清空</button></div></div></aside>
 <div id="lb" data-ui-section hidden role="dialog" aria-modal="true" aria-label="大图预览"><div class="lb-bg"></div><div class="lb-box"><button class="lb-x icon" title="关闭（Esc）" aria-label="关闭">✕</button><button class="lb-nav prev icon" aria-label="上一张">‹</button><button class="lb-nav next icon" aria-label="下一张">›</button>
@@ -148,4 +147,4 @@
 <footer class="foot" data-ui-section><div class="fi"><div><b class="fwm">衣姿 PoseWear</b><p>姿势和服装参考图。图片来自下方原图库，均为生成图。</p></div>
 <div><h4>使用提示</h4><ul><li>点 <b>＋</b> 把姿势和服装放进组合</li><li>SD 类模型用英文提示词更准</li><li>收藏和密钥只存在本机</li></ul></div>
 <div><h4>来源与致谢</h4><ul><li>素材整理自公开图库 <a href="https://ai-pose-gallery.pages.dev" target="_blank" rel="noopener">AI Pose Gallery</a>、<a href="https://ai-costume-gallery.pages.dev" target="_blank" rel="noopener">AI Costume Gallery</a> 与 <a href="https://ai-costume-anime-gallery.pages.dev" target="_blank" rel="noopener">AI Costume Anime Gallery</a></li><li>深度姿势热链自 <a href="https://ai-pose-depth-gallery.pages.dev/" target="_blank" rel="noopener">ai-pose-depth-gallery</a>（非官方汉化）</li><li>原作者 <a href="https://x.com/giaaibusi" target="_blank" rel="noopener">@giaaibusi</a></li><li>人像来自 <a href="https://ai-portrait-gallery.pages.dev" target="_blank" rel="noopener">AI Portrait Gallery</a>（<a href="https://x.com/agi_aibusi" target="_blank" rel="noopener">@agi_aibusi</a>，<a href="https://creativecommons.org/publicdomain/zero/1.0/deed.zh-hans" target="_blank" rel="noopener">CC0 1.0</a>）</li><li>中文名称和描述由本站翻译</li></ul></div></div><p class="cnote">部分姿势和内衣、性感类服装属于成人向参考，默认不显示，可以用顶部的「18+」开关打开或关闭。</p><p class="copy-r">© 衣姿 PoseWear · <a href="#" id="privO">隐私说明</a> · <a href="https://github.com/atuizz/posewear" target="_blank" rel="noopener">开源地址</a></p></footer><div id="ageBox" data-ui-section class="mdl" hidden role="dialog" aria-modal="true" aria-labelledby="ageT"><div class="hb"><h3 id="ageT">显示成人向内容？</h3><p id="ageP">包括双人互动、性感类姿势、深度姿势里的双人图，以及内衣、性感类服装。仅适合已满 18 岁的用户。只需确认一次，之后用顶部的「18+」开关随时打开或关闭。</p><div class="row"><button class="sm ghost" id="ageN">暂不</button><button class="sm pri" id="ageY">我已满 18 岁，打开</button></div></div></div><div id="privBox" data-ui-section class="mdl" hidden role="dialog" aria-modal="true" aria-labelledby="privT"><div class="hb"><h3 id="privT">隐私说明</h3><ul class="pl"><li><b>本机存储</b>：收藏、浏览记录、筛选偏好、成人内容开关和试穿记录只保存在你的浏览器（localStorage / IndexedDB），不上传。清除浏览器数据即可删除。</li><li><b>API 密钥</b>：只保存在本机。生成时由浏览器直接发给你选择的服务商；开启「通过本站代理转发」或使用自定义中转时，请求会经过本站的转发接口，只转发、不记录、不保存。</li><li><b>代理限制</b>：转发接口只接受本站页面发起的请求，只能访问官方接口地址。</li><li><b>统计</b>：本站不使用统计、广告或第三方追踪脚本，不设置 Cookie。</li><li><b>图片</b>：姿势、服装、动画服装和人像由本站托管，来自 AI Pose Gallery、AI Costume Gallery、AI Costume Anime Gallery（@giaaibusi）与 AI Portrait Gallery（@agi_aibusi）。深度姿势的图片直接从 ai-pose-depth-gallery 加载，不经过本站，对方能看到请求的 IP；这些图片不发送来源页面地址。</li></ul><div class="row"><button class="sm pri" data-close>知道了</button></div></div></div>
-<script src="ui.js" defer></script><script src="messages-common.js" defer></script><script src="messages-gallery.js" defer></script><script src="messages-studio.js" defer></script><script src="app.js" defer></script><script src="zip.js" defer></script><script src="extras.js" defer></script><script src="comfy.js" defer></script><script src="comfy-workflows.js" defer></script><script src="studio.js" defer></script></body></html>
+<script src="ui.js" defer></script><script src="messages-common.js" defer></script><script src="messages-gallery.js" defer></script><script src="messages-studio.js" defer></script><script src="app.js" defer></script><script src="zip.js" defer></script><script src="extras.js" defer></script><script src="comfy.js" defer></script><script src="comfy-workflows.js" defer></script><script src="generation-settings.js" defer></script><script src="studio.js" defer></script></body></html>

@@ -11,14 +11,17 @@ const PROV={openai:{name:'OpenAI',base:'https://api.openai.com/v1',model:'gpt-im
  seedream:{name:'豆包 Seedream',base:'https://ark.cn-beijing.volces.com/api/v3',model:'doubao-seedream-4-0-250828',models:['doubao-seedream-4-0-250828','doubao-seedream-4-5-251128','doubao-seedream-5-0-flash-260915']},
  comfy:{name:'ComfyUI',base:'http://127.0.0.1:8188',model:'',models:[]},
  custom:{name:'自定义中转',base:'',model:'gpt-image-1',models:['gpt-image-1','gpt-image-2','gemini-2.5-flash-image','flux-kontext-pro','qwen-image-edit','doubao-seedream-4-0-250828']}};
-const cfg=Object.assign({prov:'openai',base:'',key:'',model:'',quality:'',complexity:'',field:'image[]',proto:'edits',proxy:false},LS('wbCfg')||{});
-// ローカル設定を分け、クラウドのキーや接続情報を ComfyUI に渡さないようにします。
-const workflowStore=window.ComfyWorkflows;
-let comfyState=workflowStore.load(),comfy=workflowStore.active(comfyState);
-function useComfyState(next){
- comfyState=next;
- comfy=workflowStore.active(comfyState);
+// 接続と生成設定を組み合わせ、既存のクラウド送信・ワークフロー処理に渡します。
+// 設定を変更するたびに新しいオブジェクトを作るため、実行中の試着設定は変わりません。
+const generationStore=window.GenerationSettings;
+let genState,cfg,comfy;
+function applySettings(next){
+ genState=next;
+ const selected=generationStore.resolve(next);
+ cfg=selected?{...selected.connection,...selected.profile}:{prov:'openai',base:'',key:'',model:''};
+ comfy=cfg.prov=='comfy'?cfg:{workflow:null,mapping:{}};
 }
+applySettings(generationStore.load());
 const isComfy=()=>cfg.prov=='comfy';
 const COMFY_LIMIT='ComfyUI 需要 1 张人物照和 1 张服装图。';
 const COMFY_POSE='请设置 ComfyUI 的姿势图片节点，或移除已选的姿势。';
@@ -43,7 +46,7 @@ const g0=LS('wbSel')||{};
 const normBase=b=>(b||'').trim().replace(/\/+$/,'');
 function root(cfgState=cfg){const cfg=cfgState;let b=normBase(cfg.base)||PROV[cfg.prov].base;if(cfg.prov=='gemini')return/\/v1(beta|alpha)?$/.test(b)?b:b+'/v1beta';if(cfg.prov=='seedream')return b;return/\/v\d+$/.test(b)?b:b+'/v1'}
 const modelOf=(state=cfg)=>(state.model||'').trim()||PROV[state.prov].model;
-const proto=()=>cfg.prov=='openai'?'edits':cfg.prov=='custom'?cfg.proto:cfg.prov;
+
 // 読み込みエラーはキーを保持し、エラー表示中に言語を切り替えても翻訳できるようにします。
 function imageError(key,params){
  const error=Error(key);
@@ -152,17 +155,24 @@ function pickRow(a,type,i){const it=a.kind=='lib'&&A.ITEMS[a.k];if(a.kind=='lib'
  return`<div class="pick ${type}"><img src="${src}" alt="${esc(name)}"><div><b>${esc(name)}</b><small>${esc(sub)}</small></div>${type=='pose'&&it?`<select data-ang="${i}" aria-label="${esc(t('角度'))}">${it.angles.map((x,j)=>`<option value="${j}" ${j==(a.ai??it.ai)?'selected':''}>${esc(angleLabel(x))}</option>`).join('')}</select>`:''}<button class="rmx" data-rm="${type}" data-i="${i}" aria-label="${esc(t('移除'))}" title="${esc(t('移除'))}">×</button></div>`}
 function render(localeOnly=false){
  const local=isComfy(),G=isGen(),poseEnabled=canPickPose();
- $('#wbWorkflowControls').hidden=!local;
- if(local){
-  const picker=$('#wbWorkflow');
-  picker.replaceChildren(...comfyState.workflows.map(profile=>new Option(profile.name,profile.id)));
-  if(!comfy.id&&comfyState.workflows.length){
-   const placeholder=new Option(t('选择已注册的工作流'),'');
-   placeholder.disabled=true;picker.prepend(placeholder);
-  }
-  picker.value=comfy.id||'';picker.disabled=!!W.busy;
-  $('#wbWorkflowWrap').hidden=!comfyState.workflows.length;
+ // 試着素材を用意したまま、接続別のリストで次に使う設定を選べます。
+ const picker=$('#wbWorkflow');
+ const groups=[];
+ for(const connection of genState.connections){
+  const profiles=genState.profiles.filter(profile=>profile.connectionId===connection.id);
+  if(!profiles.length)continue;
+  const group=document.createElement('optgroup');
+  group.label=connection.name;
+  group.append(...profiles.map(profile=>new Option(profile.name,profile.id)));
+  groups.push(group);
  }
+ picker.replaceChildren(...groups);
+ if(!genState.activeId){
+  const placeholder=new Option(t('选择生成设置'),'');
+  placeholder.disabled=true;picker.prepend(placeholder);
+ }
+ picker.value=genState.activeId||'';picker.disabled=!!W.busy;
+ $('#wbWorkflowControls').hidden=!groups.length;
  const promptEnabled=!local||!!comfy.mapping.prompt,aspectEnabled=!local||!!comfy.mapping.aspect;
  const countEnabled=!local||!!comfy.mapping.seed;
  // 未設定の入力は隠し、設定変更前に選んだポーズだけは削除できるようにします。
@@ -391,14 +401,14 @@ function neutralize(p,lang){if(lang=='ja')return FRAME.ja+'\n'+p;let t=p;for(con
  return FRAME[lang]+'\n'+t}
 // 表示文言の更新と入力の初期化を分け、言語変更時は編集中の値を保持します。
 const COMFY_ERRORS={
- invalidBase:'请输入本机回环地址，例如 http://127.0.0.1:8188。',
+ invalidBase:'请输入本机回环地址或局域网私有 IPv4 地址。',
  invalidWorkflow:'无法读取工作流。请在 ComfyUI 中以 API 格式导出 JSON。',
  invalidWorkflowName:'请输入工作流名称。',
  invalidMapping:'请选择两个不同的 LoadImage 节点和一个 SaveImage 节点。',
  invalidPoseMapping:'姿势图片需要单独的 LoadImage 节点。',
  invalidImage:'无法读取试穿所需的图片。',
  invalidJob:'ComfyUI 生成设置无效，请检查节点和画幅。',
- connection:'无法连接 ComfyUI。请检查本机地址、服务是否运行、CORS 和浏览器的本地网络权限。',
+ connection:'无法连接 ComfyUI。请检查连接地址、服务是否运行、CORS 和浏览器的本地网络权限。',
  upload:'无法将图片上传到 ComfyUI。',
  submit:'ComfyUI 无法接受工作流。请检查所需节点和模型是否已安装。',
  history:'无法读取 ComfyUI 的生成状态。',
@@ -436,37 +446,18 @@ function showComfyWorkflow(suggest=false){
   else if(candidates.length==1&&['output','prompt','aspect'].includes(key))select.value=candidates[0][0];
  }
 }
-function readComfy(){
- return {
-  ...comfyDraft,
-  name:$('#cfComfyProfileName').value.trim(),
-  base:$('#cfComfyBase').value,
-  mapping:Object.fromEntries(COMFY_BINDINGS.map(([key,selector])=>[key,$(selector).value]))
- };
-}
-function editComfy(profile){
- // ファイルを読み込み中に選択を変えた場合は、古い読み込み結果を反映しません。
- configRevision++;
- comfyDraft=profile?{...profile}:{id:null,name:'',fileName:'',workflow:null,mapping:{}};
- const picker=$('#cfComfySaved');
- picker.replaceChildren(new Option(t('选择已注册的工作流'),''),...comfyState.workflows.map(item=>new Option(item.name,item.id)));
- picker.options[0].disabled=true;picker.value=comfyDraft.id||'';
- $('#cfComfySavedWrap').hidden=!comfyState.workflows.length;
- $('#cfComfyDelete').hidden=!comfyDraft.id;
- $('#cfComfyProfileName').value=comfyDraft.name;
- $('#cfComfyWorkflow').value='';
- showComfyWorkflow();
- cfgMessage=null;$('#cfComfyMsg').textContent='';$('#cfComfyMsg').className='fine';
-}
 const cfgLink=(url,label)=>`<a href="${url}" target="_blank" rel="noopener">${esc(label)}</a>`;
 function cfgLabels(prov){
  const P=PROV[prov];
  const local=prov=='comfy';
  // OpenAI の任意項目は、ほかのサービスの設定を編集するときには隠します。
  $('#cfQualityW').hidden=$('#cfComplexityW').hidden=prov!='openai';
- $('#cfCloud').hidden=local;$('#cfCloudFooter').hidden=local;
- if(local){$('#cfHelp').textContent='';return}
+ $('#cfCloud').hidden=local;$('#cfComfy').hidden=!local;
+ $('#cfKeyW').hidden=$('#cfProxyW').hidden=local;
+ $('#cfProtoW').hidden=prov!='custom';
+ $('#cfFieldW').hidden=prov!='custom'||$('#cfProto').value!='edits';
  $('#cfBase').placeholder=P.base||t('https://你的中转地址/v1');
+ if(local){$('#cfHelp').textContent='';return}
  $('#cfKey').placeholder=prov=='gemini'?'AIza…':t('sk-… / 方舟 API Key');
  $('#cfEye').textContent=t($('#cfKey').type=='password'?'显示':'隐藏');
  const help={
@@ -524,80 +515,106 @@ $('#cfModel').oninput=()=>{$('#cfOpenAIModels').selectedIndex=-1};
 for(const selector of ['#cfKey','#cfBase','#cfProxy']){
  $(selector).addEventListener('input',resetModelList);
 }
-let cfgMessage;
-function cfgFill(){
-
- $$('[name=prov]').forEach(r=>r.checked=r.value==cfg.prov);
- const cloud=cfg.prov=='comfy'?(cfg.cloudProv||'openai'):cfg.prov;
- const P=PROV[cloud];
- $('#cfKey').type='password';
- $('#cfBase').value=cfg.base;$('#cfKey').value=cfg.key;
- $('#cfModel').value=cfg.model;$('#cfModel').placeholder=P.model;
- resetModelList();
- $('#cfQuality').value=cfg.quality;$('#cfComplexity').value=cfg.complexity;
- $('#cfModels').replaceChildren(...P.models.map(m=>new Option(m,m)));
- $('#cfField').value=cfg.field;$('#cfProto').value=cfg.proto;$('#cfProtoW').hidden=cloud!='custom';
- $('#cfFieldW').hidden=!(cloud=='custom'&&cfg.proto=='edits');$('#cfProxy').checked=cfg.proxy;
- cfgLabels(cfg.prov);cfgMessage=null;$('#cfMsg').textContent='';$('#cfMsg').className='fine';
-}
-function cfgRead(){
+let cfgMessage, savedConnectionForm, savedProfileForm;
+const currentProvider=()=>$('[name=prov]:checked').value;
+function readConnection(){
+ const prov=currentProvider();
+ // 接続テストと保存で同じ接続先を使い、ComfyUIの空欄は表示中の既定URLとして扱います。
+ const base=$('#cfBase').value.trim() || (prov=='comfy'?PROV.comfy.base:'');
  return {
-  prov:$('[name=prov]:checked')?.value||'openai',
-  base:$('#cfBase').value.trim(),key:$('#cfKey').value.trim(),model:$('#cfModel').value.trim(),
-  quality:$('#cfQuality').value.trim(),complexity:$('#cfComplexity').value.trim(),
-  field:$('#cfField').value,proto:$('#cfProto').value,proxy:$('#cfProxy').checked
+  id:$('#cfConnection').value||null,name:$('#cfConnectionName').value.trim(),prov,
+  base,key:$('#cfKey').value.trim(),proxy:$('#cfProxy').checked,
+  field:$('#cfField').value,proto:$('#cfProto').value
  };
 }
-const cloudCfgOpen=()=>{configRevision++;cfgFill();$('#cfg').hidden=false;document.body.style.overflow='hidden';$('#cfgX').focus()};
-const cfgClose=()=>{resetModelList();configRevision++;$('#cfg').hidden=true;document.body.style.overflow=''};
-const comfyOpen=()=>{
- $('#comfyManager').hidden=false;document.body.style.overflow='hidden';
- $('#cfComfyBase').value=comfy.base;editComfy(comfy.id?comfy:comfyState.workflows[0]);$('#cfComfyX').focus();
-};
-const comfyClose=()=>{configRevision++;$('#comfyManager').hidden=true;document.body.style.overflow=''};
-const cfgOpen=()=>isComfy()?comfyOpen():cloudCfgOpen();
-$('#wbCfg').onclick=cfgOpen;$('#wbCfg2').onclick=cfgOpen;$('#wbOnbGo').onclick=cfgOpen;
-$('#cfgX').onclick=cfgClose;$('#cfg').addEventListener('click',e=>{if(e.target.id=='cfg')cfgClose()});
-$('#wbWorkflowManage').onclick=comfyOpen;
-$('#cfComfyX').onclick=comfyClose;
-$('#comfyManager').addEventListener('click',e=>{if(e.target.id=='comfyManager')comfyClose()});
-$('#cfComfyProviders').onclick=()=>{comfyClose();cloudCfgOpen()};
-$('[name=prov][value=comfy]').onclick=()=>{cfgClose();comfyOpen()};
-$$('[name=prov]').forEach(r=>r.onchange=()=>{
- if(r.value=='comfy')return;
- resetModelList();configRevision++;
- const prov=r.value,stored=isComfy()?cfg.cloudProv||'openai':cfg.prov;
- const P=PROV[prov];
- $('#cfBase').value=prov==stored?cfg.base:'';
- $('#cfModel').value=prov==stored?cfg.model:'';
+function readProfile(){
+ const profile={id:$('#cfProfile').value||null,connectionId:$('#cfConnection').value,name:$('#cfProfileName').value.trim()};
+ if(currentProvider()=='comfy'){
+  return {...profile,workflow:comfyDraft.workflow,fileName:comfyDraft.fileName,
+   mapping:Object.fromEntries(COMFY_BINDINGS.map(([key,selector])=>[key,$(selector).value]))};
+ }
+ return {...profile,model:$('#cfModel').value.trim(),quality:$('#cfQuality').value.trim(),complexity:$('#cfComplexity').value.trim()};
+}
+function cfgRead(){
+ // 一覧取得と接続テストは、まだ保存していない接続先にも実行できます。
+ return {...readConnection(),model:$('#cfModel').value.trim()};
+}
+function clearSettingsMessage(){
+ cfgMessage=null;$('#cfMsg').textContent='';
+}
+function editProfile(id){
+ configRevision++;resetModelList();clearSettingsMessage();
+ const profiles=genState.profiles.filter(profile=>profile.connectionId==$('#cfConnection').value);
+ const profile=profiles.find(item=>item.id===id);
+ const picker=$('#cfProfile');
+ picker.replaceChildren(new Option(t('新建生成设置'),''),...profiles.map(item=>new Option(item.name,item.id)));
+ picker.value=profile?.id||'';
+ $('#cfDelete').hidden=!profile;
+ $('#cfProfileName').value=profile?.name||'';
+ $('#cfModel').value=profile?.model||'';
+ $('#cfQuality').value=profile?.quality||'';$('#cfComplexity').value=profile?.complexity||'';
+ const P=PROV[currentProvider()];
  $('#cfModel').placeholder=P.model;
  $('#cfModels').replaceChildren(...P.models.map(m=>new Option(m,m)));
- if(prov=='seedream')$('#cfProxy').checked=true;
- $('#cfProtoW').hidden=prov!='custom';
- $('#cfFieldW').hidden=!(prov=='custom'&&$('#cfProto').value=='edits');
- cfgLabels(prov);
- cfgMessage=null;$('#cfMsg').textContent='';
- if(prov=='seedream')msg('火山方舟接口不允许浏览器跨域，已开启本站代理');
+ comfyDraft={workflow:profile?.workflow||null,fileName:profile?.fileName||'',mapping:profile?.mapping||{}};
+ $('#cfComfyWorkflow').value='';
+ showComfyWorkflow();
+ // JSON本体は大きいため、比較用に複製せず、ファイルの差し替えだけを参照で判定します。
+ const {workflow,...fields}=readProfile();
+ savedProfileForm={workflow,fields:JSON.stringify(fields)};
+}
+function editConnection(id, profileId){
+ const connection=genState.connections.find(item=>item.id===id);
+ const picker=$('#cfConnection');
+ picker.replaceChildren(new Option(t('新建连接'),''),...genState.connections.map(item=>new Option(item.name,item.id)));
+ picker.value=connection?.id||'';
+ const prov=connection?.prov||'openai';
+ for(const radio of $$('[name=prov]')){
+  radio.checked=radio.value==prov;
+  // 登録済み接続の種類は固定し、既存のモデルやワークフローとの組み合わせを守ります。
+  radio.disabled=!!connection;
+ }
+ $('#cfConnectionDelete').hidden=!connection;
+ $('#cfConnectionName').value=connection?.name||'';
+ $('#cfBase').value=connection?.base||'';
+ $('#cfKey').type='password';$('#cfKey').value=connection?.key||'';
+ $('#cfProto').value=connection?.proto||'edits';$('#cfField').value=connection?.field||'image[]';
+ $('#cfProxy').checked=!!connection?.proxy;
+ cfgLabels(prov);savedConnectionForm=JSON.stringify(readConnection());
+ $('#cfProfileSection').hidden=!connection;
+ editProfile(profileId||genState.profiles.find(item=>item.connectionId===id)?.id);
+}
+function refreshSettings(){
+ const active=generationStore.resolve(genState);
+ editConnection(active?.connection.id||genState.connections[0]?.id,active?.profile.id);
+}
+function cfgOpen(){
+ refreshSettings();$('#cfg').hidden=false;document.body.style.overflow='hidden';$('#cfgX').focus();
+ if(generationStore.loadIssue)msg(generationStore.loadIssue,1);
+}
+function cfgClose(){
+ resetModelList();configRevision++;$('#cfg').hidden=true;document.body.style.overflow='';
+}
+$('#wbCfg').onclick=$('#wbCfg2').onclick=$('#wbOnbGo').onclick=$('#wbWorkflowManage').onclick=cfgOpen;
+$('#cfgX').onclick=cfgClose;
+$('#cfg').addEventListener('click',e=>{if(e.target.id=='cfg')cfgClose()});
+$('#cfConnection').onchange=e=>editConnection(e.target.value);
+$('#cfConnectionNew').onclick=()=>{editConnection();$('#cfConnectionName').focus()};
+$('#cfProfile').onchange=e=>editProfile(e.target.value);
+$('#cfProfileNew').onclick=()=>{editProfile();$('#cfProfileName').focus()};
+$$('[name=prov]').forEach(r=>r.onchange=()=>{
+ // 新規接続のサービスを変えたときは、前のサービス用のキーやURLを引き継ぎません。
+ $('#cfBase').value='';$('#cfKey').value='';$('#cfProxy').checked=r.value=='seedream';
+ cfgLabels(r.value);editProfile();
 });
-$('#cfComfySaved').onchange=e=>editComfy(comfyState.workflows.find(profile=>profile.id===e.target.value));
-$('#cfComfyNew').onclick=()=>{
- editComfy();
- $('#cfComfyWorkflow').focus();
-};
-$('#cfComfyDelete').onclick=()=>{
- if(W.busy)return msg('请等待当前生成完成。',1);
- if(!comfyDraft.id||!confirm(t('删除工作流「{name}」？',{name:comfyDraft.name})))return;
- try{
-  useComfyState(workflowStore.remove(comfyState,comfyDraft.id));
-  editComfy(comfy.id?comfy:comfyState.workflows[0]);render();msg('已删除工作流');
- }catch(error){msg(()=>comfySaveError(error),1)}
-};
+for(const field of ['Quality','Complexity']){
+ $('#cf'+field+'Reset').onclick=()=>{$('#cf'+field).value=''};
+}
 $('#wbWorkflow').onchange=e=>{
- if(W.busy){e.target.value=comfy.id;return}
- try{
-  useComfyState(workflowStore.select(comfyState,e.target.value));
- }catch(error){toast(comfySaveError(error))}
- render();
+ if(W.busy){e.target.value=genState.activeId||'';return}
+ try{applySettings(generationStore.select(genState,e.target.value))}
+ catch(error){toast(settingsError(error))}
+ render(true);
 };
 $('#cfComfyWorkflow').onchange=async e=>{
  const file=e.target.files[0],draft=comfyDraft,revision=++configRevision;
@@ -606,69 +623,102 @@ $('#cfComfyWorkflow').onchange=async e=>{
  try{
   const workflow=window.ComfyUI.parseWorkflow(await file.text());
   if(revision!=configRevision||draft!==comfyDraft)return;
-  const name=$('#cfComfyProfileName').value.trim()||file.name.replace(/\.json$/i,'').trim();
+  const name=$('#cfProfileName').value.trim()||file.name.replace(/\.json$/i,'').trim();
   comfyDraft={...draft,workflow,mapping:{},name,fileName:file.name};
-  $('#cfComfyProfileName').value=name;
+  $('#cfProfileName').value=name;
   showComfyWorkflow(true);
-  cfgMessage=null;$('#cfComfyMsg').textContent='';
+  clearSettingsMessage();
  }catch(error){
   if(revision==configRevision)msg(()=>comfyError(error),1);
  }
 };
 $('#cfProto').onchange=()=>{$('#cfFieldW').hidden=$('#cfProto').value!='edits'};
 $('#cfEye').onclick=()=>{const k=$('#cfKey');k.type=k.type=='password'?'text':'password';$('#cfEye').textContent=t(k.type=='password'?'显示':'隐藏')};
-const comfySaveError=error=>error.code?comfyError(error):t('无法在此浏览器中保存 ComfyUI 设置。');
-function setComfyProvider(){
- if(!isComfy())cfg.cloudProv=cfg.prov;
- cfg.prov='comfy';SV('wbCfg',cfg);
+function settingsError(error){
+ const labels={invalidConnectionName:'请输入连接名称。',invalidProfileName:'请输入生成设置名称。',
+  connectionInUse:'请先删除此连接的生成设置。',invalidConnection:'请选择有效的连接。',invalidProfile:'请选择已保存的生成设置。'};
+ return t(labels[error.code]||COMFY_ERRORS[error.code]||'无法在此浏览器中保存设置。');
 }
-$('#cfComfySave').onclick=()=>{
- if(W.busy)return msg('请等待当前生成完成。',1);
- if(!comfyDraft.workflow)return msg('请选择 ComfyUI 试穿工作流。',1);
+$('#cfConnectionSave').onclick=()=>{
+ const input=readConnection();
+ if(input.prov=='custom'&&!input.base)return msg('自定义中转需要填写 Base URL',1);
  try{
-  const saved=workflowStore.save(comfyState,readComfy());
-  useComfyState(saved.state);
-  $('#cfComfyBase').value=comfy.base;editComfy(saved.profile);
- }catch(error){return msg(()=>comfySaveError(error),1)}
- render();msg('已保存工作流');
+  const {state,connection}=generationStore.saveConnection(genState,input);
+  applySettings(state);
+  if(!input.id)editConnection(connection.id);
+  else{
+   // 接続だけを保存したとき、隣で編集中の生成設定はそのまま残します。
+   $('#cfConnection').selectedOptions[0].textContent=connection.name;
+   $('#cfBase').value=connection.base||'';
+   savedConnectionForm=JSON.stringify(readConnection());
+  }
+  render(true);msg('已保存连接');
+ }catch(error){msg(()=>settingsError(error),1)}
 };
-$('#cfComfyUse').onclick=()=>{
- if(W.busy)return msg('请等待当前生成完成。',1);
- const draft=readComfy();
- const saved=comfyState.workflows.find(profile=>profile.id===draft.id);
- // 「使う」で編集中の内容が失われないよう、表示中の内容と保存した登録を照合します。
- if(!saved||saved.workflow!==draft.workflow||saved.name!==draft.name||draft.base.trim()!==comfy.base||
-    COMFY_BINDINGS.some(([role])=>(saved.mapping[role]||'')!==draft.mapping[role])){
-  return msg('请先保存更改',1);
- }
- try{useComfyState(workflowStore.select(comfyState,saved.id))}
- catch(error){return msg(()=>comfySaveError(error),1)}
- setComfyProvider();render();comfyClose();$('#wbWorkflow').focus();
+$('#cfConnectionDelete').onclick=()=>{
+ const connection=genState.connections.find(item=>item.id==$('#cfConnection').value);
+ if(!connection)return;
+ if(genState.profiles.some(profile=>profile.connectionId===connection.id))return msg('请先删除此连接的生成设置。',1);
+ if(!confirm(t('删除连接「{name}」？',{name:connection.name})))return;
+ try{
+  applySettings(generationStore.removeConnection(genState,connection.id));
+  refreshSettings();render(true);msg('已删除连接');
+ }catch(error){msg(()=>settingsError(error),1)}
+};
+$('#cfClr').onclick=()=>{
+ const connection=genState.connections.find(item=>item.id==$('#cfConnection').value);
+ try{
+  // 開いている接続の保存済みキーだけを消し、編集中のURLや別の接続には触れません。
+  if(connection){
+   const {state}=generationStore.saveConnection(genState,{...connection,key:''});
+   applySettings(state);
+   savedConnectionForm=JSON.stringify({...JSON.parse(savedConnectionForm),key:''});
+  }
+  $('#cfKey').value='';resetModelList();render(true);msg('已从本机清除密钥');
+ }catch(error){msg(()=>settingsError(error),1)}
 };
 $('#cfSave').onclick=()=>{
- if(W.busy)return msg('请等待当前生成完成。',1);
- const o=cfgRead();
- if(o.prov=='custom'&&!o.base)return msg('自定义中转需要填写 Base URL',1);
- Object.assign(cfg,o);SV('wbCfg',cfg);render();cfgClose();toast('API 设置已保存在本机');
+ if(JSON.stringify(readConnection())!==savedConnectionForm)return msg('请先保存连接',1);
+ try{
+  const {state,profile}=generationStore.saveProfile(genState,readProfile());
+  applySettings(state);editProfile(profile.id);render(true);msg('已保存生成设置');
+ }catch(error){msg(()=>settingsError(error),1)}
 };
-$('#cfClr').onclick=()=>{resetModelList();cfg.key='';$('#cfKey').value='';SV('wbCfg',cfg);render();msg('已从本机清除密钥')};
+$('#cfUse').onclick=()=>{
+ if(W.busy)return msg('请等待当前生成完成。',1);
+ const {workflow,...fields}=readProfile();
+ // 「使う」は保存済みの設定だけを選び、未保存の入力を黙って破棄しません。
+ if(!fields.id||savedConnectionForm!==JSON.stringify(readConnection())||
+    savedProfileForm.workflow!==workflow||savedProfileForm.fields!==JSON.stringify(fields)){
+  return msg('请先保存更改',1);
+ }
+ try{applySettings(generationStore.select(genState,fields.id))}
+ catch(error){return msg(()=>settingsError(error),1)}
+ render(true);cfgClose();$('#wbWorkflow').focus();
+};
+$('#cfDelete').onclick=()=>{
+ const id=$('#cfProfile').value;
+ if(W.busy&&id===genState.activeId)return msg('请等待当前生成完成。',1);
+ const profile=genState.profiles.find(item=>item.id===id);
+ if(!profile||!confirm(t('删除生成设置「{name}」？',{name:profile.name})))return;
+ try{
+  applySettings(generationStore.removeProfile(genState,id));
+  editProfile();render(true);msg('已删除生成设置');
+ }catch(error){msg(()=>settingsError(error),1)}
+};
 function msg(key,bad,params){
  cfgMessage=typeof key=='function'?key:()=>t(key,params);
- const m=$($('#comfyManager').hidden?'#cfMsg':'#cfComfyMsg');
- m.textContent=cfgMessage();m.className='fine '+(bad?'bad':'good');
+ const m=$('#cfMsg');m.textContent=cfgMessage();m.className='fine '+(bad?'bad':'good');
 }
-$('#cfComfyTest').onclick=async()=>{
- const revision=++configRevision;
- const report=(...args)=>{if(revision==configRevision)msg(...args)};
- report('正在连接…');
- try{
-  await window.ComfyUI.test($('#cfComfyBase').value);
-  report('已连接到 ComfyUI。');
- }catch(error){report(()=>error.code=='timeout'?t('连接 ComfyUI 超时。'):comfyError(error),1)}
-};
 $('#cfTest').onclick=async()=>{
  const o=cfgRead(),revision=++configRevision;
  const report=(...args)=>{if(revision==configRevision)msg(...args)};
+ if(o.prov=='comfy'){
+  report('正在连接…');
+  try{await window.ComfyUI.test(o.base);report('已连接到 ComfyUI。')}
+  catch(error){report(()=>error.code=='timeout'?t('连接 ComfyUI 超时。'):comfyError(error),1)}
+  return;
+ }
  if(!o.key)return report('请先填写 API Key',1);
  if(o.prov=='custom'&&!o.base)return report('请填写 Base URL',1);
  report('正在连接…');
@@ -721,11 +771,13 @@ function geminiMessage(reason,detail){
  const header=reason?t('模型没有返回图片（{reason}，可能触发了安全策略）',{reason}):t('模型没有返回图片');
  return detail?header+'\n'+t('模型回复：{detail}',{detail:detail.slice(0,300)}):header;
 }
-async function genOnce(imgs,prompt,sig){const ar=$('#wbAR').value,m=modelOf(),P=proto();let warn='';
+async function genOnce(imgs,prompt,sig,cfg,ar){
+ const m=modelOf(cfg),P=cfg.prov=='openai'?'edits':cfg.prov=='custom'?cfg.proto:cfg.prov;
+ let warn='';
  if(P=='gemini'){const parts=[{text:prompt}];for(const b of imgs)parts.push({inline_data:{mime_type:b.type||'image/jpeg',data:await b64(b)}});const gc={responseModalities:['TEXT','IMAGE']};if(ar!='auto')gc.imageConfig={aspectRatio:ar};
-  const r=await call(`${root()}/models/${encodeURIComponent(m)}:generateContent`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify({contents:[{role:'user',parts}],generationConfig:gc})});
-  const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j);const c=j&&j.candidates&&j.candidates[0],ps=((j&&j.candidates)||[]).flatMap(c=>(c.content&&c.content.parts)||[]),im=ps.find(p=>(p.inlineData||p.inline_data||{}).data);
-  if(!im){const why=(j&&j.promptFeedback&&j.promptFeedback.blockReason)||(c&&c.finishReason);{const rs=(c&&c.safetyRatings||[]).filter(x=>x.blocked||/HIGH|MEDIUM/.test(x.probability||'')).map(x=>x.category).join(' ');const se=why&&/SAFETY|PROHIBITED|BLOCKLIST|SPII|OTHER/i.test(why)?safeErr(why+' '+rs+' '+((c&&c.finishMessage)||''),null,j&&j.responseId):null;if(se)throw se}const t=ps.map(p=>p.text).filter(Boolean).join(' ');const e=Error(t);e.ui=()=>geminiMessage(why,t);throw e}
+  const r=await call(`${root(cfg)}/models/${encodeURIComponent(m)}:generateContent`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth(cfg)),body:JSON.stringify({contents:[{role:'user',parts}],generationConfig:gc})},cfg);
+  const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j,cfg);const c=j&&j.candidates&&j.candidates[0],ps=((j&&j.candidates)||[]).flatMap(c=>(c.content&&c.content.parts)||[]),im=ps.find(p=>(p.inlineData||p.inline_data||{}).data);
+  if(!im){const why=(j&&j.promptFeedback&&j.promptFeedback.blockReason)||(c&&c.finishReason);{const rs=(c&&c.safetyRatings||[]).filter(x=>x.blocked||/HIGH|MEDIUM/.test(x.probability||'')).map(x=>x.category).join(' ');const se=why&&/SAFETY|PROHIBITED|BLOCKLIST|SPII|OTHER/i.test(why)?safeErr(why+' '+rs+' '+((c&&c.finishMessage)||''),null,j&&j.responseId,cfg):null;if(se)throw se}const t=ps.map(p=>p.text).filter(Boolean).join(' ');const e=Error(t);e.ui=()=>geminiMessage(why,t);throw e}
   const d=im.inlineData||im.inline_data;return{blob:await(await fetch(`data:${d.mimeType||d.mime_type||'image/png'};base64,${d.data}`)).blob()}}
  // 空欄の項目は送らずモデルの既定値を使います。明示的に選んだ auto は送信します。
  const imageOptions={};
@@ -734,13 +786,13 @@ async function genOnce(imgs,prompt,sig){const ar=$('#wbAR').value,m=modelOf(),P=
   if(cfg.complexity)imageOptions.complexity=cfg.complexity;
  }
  const json=async(withImgs,extra)=>{const body=Object.assign({model:m,prompt,n:1},extra,imageOptions);if(withImgs&&imgs.length)body.image=await Promise.all(imgs.map(dataURL));
-  const r=await call(`${root()}/images/generations`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body)});const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j);return openaiData(j)};
+  const r=await call(`${root(cfg)}/images/generations`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth(cfg)),body:JSON.stringify(body)},cfg);const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j,cfg);return openaiData(j)};
  if(P=='seedream'){const ex={size:SD[ar]||SD.auto,response_format:'b64_json',watermark:false,sequential_image_generation:'disabled'};try{return{blob:await json(true,ex)}}catch(e){if(!e.safe&&e.status==400&&/image|参考/i.test(e.message)){warn='该模型没有接收参考图，结果只按文字生成，人物与服装可能对不齐。';return{blob:await json(false,ex),warn}}throw e}}
  const sz=AR[ar]||(/^gpt-image/.test(m)?'auto':'1024x1024');
  if(P=='json')return{blob:await json(true,{size:sz})};
  const edits=async field=>{const fd=new FormData();fd.append('model',m);fd.append('prompt',prompt);const one=/^dall-e-2$/.test(m);(one?imgs.slice(0,1):imgs).forEach((b,i)=>fd.append(field,b,`ref-${i+1}.jpg`));fd.append('n','1');fd.append('size',one&&sz=='auto'?'1024x1024':sz);
   for(const [name,value] of Object.entries(imageOptions))fd.append(name,value);
-  const r=await call(`${root()}/images/edits`,{method:'POST',signal:sig,headers:auth(),body:fd});const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j);return openaiData(j)};
+  const r=await call(`${root(cfg)}/images/edits`,{method:'POST',signal:sig,headers:auth(cfg),body:fd},cfg);const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j,cfg);return openaiData(j)};
  const f0=cfg.prov=='custom'?cfg.field:'image[]';
  try{return{blob:await edits(f0)}}catch(e){if(e.name=='AbortError'||e.safe||e.imageOptionError)throw e;
   if(e.status==400&&/image/i.test(e.message)&&!/safety|moderation|reject/i.test(e.message)){try{return{blob:await edits(f0=='image[]'?'image':'image[]'),warn:'已自动改用另一种图片字段名重试成功。'}}catch(x){if(x.imageOptionError||x.safe||x.name=='AbortError')throw x}}
@@ -879,6 +931,8 @@ async function runComfy(){
  }
 }
 async function run(){if(W.busy)return;if(isComfy())return runComfy();if(!cfg.key){toast('请先配置你的 API');return cfgOpen()}const need=missingReference();if(need)return toast(need);
+ // 開始時の設定と画角を全画像で共有し、履歴にも同じモデルを記録します。
+ const runSettings=cfg,aspectRatio=$('#wbAR').value;
  const ac=new AbortController();W.busy=ac;
  // 非同期の画像読み込みが始まる前に、表示中の送信言語と本文を画像ごとに確定します。
  const n=+$('#wbN').value||1,jobs=[],pl=W.pl,edited=W.dirty?$('#wbPrompt').value.trim():'';
@@ -892,7 +946,7 @@ async function run(){if(W.busy)return;if(isComfy())return runComfy();if(!cfg.key
  try{const pb=W.persons.map(p=>p.blob),gb=await Promise.all(W.garments.map(g=>assetBlob(g,ac.signal))),cache=new Map();const poseB=async p=>{const key=p.k+':'+p.ai;if(!cache.has(key))cache.set(key,assetBlob(p,ac.signal));return cache.get(key)};
   stage(total>1?'模型正在绘制… 共 {count} 张':'模型正在绘制…',{count:total});
   let q=0;const worker=async()=>{while(q<jobs.length&&!ac.signal.aborted){const {set,prompt0,soft,prompt}=jobs[q++];try{const imgs=[...pb,...gb,...await Promise.all(set.map(poseB))];W.lastSent=prompt;
-    const jc=new AbortController(),onA=()=>jc.abort();ac.signal.addEventListener('abort',onA);let tmo=false;const tm=setTimeout(()=>{tmo=true;jc.abort()},window.__TMO||180000);let r;try{r=await genOnce(imgs,prompt,jc.signal)}catch(x){x.sent=prompt;if(tmo&&!ac.signal.aborted){const y=Error('timeout');y.ui=()=>t('等了 3 分钟还没有返回。服务商可能正忙，稍后点「重试」。');throw y}throw x}finally{clearTimeout(tm);ac.signal.removeEventListener('abort',onA)}if(r.warn)warns.add(r.warn);const rec={t:Date.now()+Math.random(),prov:cfg.prov,model:modelOf(),prompt,orig:soft?prompt0:null,neutral:soft,mode:W.mode,label:set.map(p=>poseDesc(p,'zh').split('（')[0]).join(' / ')||'',poseNames:set.map(p=>A.ITEMS[p.k]).filter(Boolean).map(it=>({zh:it.zh,en:it.titleEn,ja:it.titleJa})),before:pb[0]||null,after:r.blob};got.push(rec);await save(rec);W.results=got.slice();show(got.length-1)}
+    const jc=new AbortController(),onA=()=>jc.abort();ac.signal.addEventListener('abort',onA);let tmo=false;const tm=setTimeout(()=>{tmo=true;jc.abort()},window.__TMO||180000);let r;try{r=await genOnce(imgs,prompt,jc.signal,runSettings,aspectRatio)}catch(x){x.sent=prompt;if(tmo&&!ac.signal.aborted){const y=Error('timeout');y.ui=()=>t('等了 3 分钟还没有返回。服务商可能正忙，稍后点「重试」。');throw y}throw x}finally{clearTimeout(tm);ac.signal.removeEventListener('abort',onA)}if(r.warn)warns.add(r.warn);const rec={t:Date.now()+Math.random(),prov:runSettings.prov,model:modelOf(runSettings),prompt,orig:soft?prompt0:null,neutral:soft,mode:W.mode,label:set.map(p=>poseDesc(p,'zh').split('（')[0]).join(' / ')||'',poseNames:set.map(p=>A.ITEMS[p.k]).filter(Boolean).map(it=>({zh:it.zh,en:it.titleEn,ja:it.titleJa})),before:pb[0]||null,after:r.blob};got.push(rec);await save(rec);W.results=got.slice();show(got.length-1)}
    catch(e){if(e.name=='AbortError')throw e;errs.push(e)}finally{done++}}};
   await Promise.all(Array.from({length:Math.min(2,jobs.length)},worker));
   if(got.length){toast(got.length>1?'完成 {count} 张':'生成完成',null,{count:got.length});hist()}if(errs.length){const e=errs.find(x=>x.safe)||errs[0];errBox(e,got.length?errs.length:0)}
@@ -922,7 +976,7 @@ function errorText(){
  }
  el.innerHTML=`<b>${head||t('生成失败')}</b><p>${esc(nice(e)).replace(/\n/g,'<br>')}</p><div class="row"><button class="sm" id="wbRetry">${t('重试')}</button><button class="sm ghost" data-open-cfg>${t('检查 API 设置')}</button></div>`;
 }
-$('#wbStage').addEventListener('click',e=>{const f=e.target.closest('[data-ef]');if(f){const k=f.dataset.ef;if(k=='prov'){cfgOpen();const p=$('#cfg .prov');p.scrollIntoView({block:'start'});p.classList.remove('hl');void p.offsetWidth;p.classList.add('hl');const o=$('[name=prov]:not(:checked)');o&&o.focus()}if(k=='cos')picker('costume');if(k=='neutral'){SV('wbNeutral',true);$('#wbNeutral').checked=true;run()}if(k=='copy')A.copy?A.copy(f.previousElementSibling.textContent):navigator.clipboard.writeText(f.previousElementSibling.textContent).then(()=>toast('已复制'));return}if(e.target.id=='wbRetry')run();if(e.target.closest('[data-open-cfg]'))cfgOpen()});
+$('#wbStage').addEventListener('click',e=>{const f=e.target.closest('[data-ef]');if(f){const k=f.dataset.ef;if(k=='prov'){cfgOpen();$('#cfConnection').focus()}if(k=='cos')picker('costume');if(k=='neutral'){SV('wbNeutral',true);$('#wbNeutral').checked=true;run()}if(k=='copy')A.copy?A.copy(f.previousElementSibling.textContent):navigator.clipboard.writeText(f.previousElementSibling.textContent).then(()=>toast('已复制'));return}if(e.target.id=='wbRetry')run();if(e.target.closest('[data-open-cfg]'))cfgOpen()});
 $('#wbGo').onclick=run;$('#wbAgain').onclick=run;$('#wbStop').onclick=()=>W.busy&&W.busy.abort();
 // ---------- 结果 ----------
 const ru=new Map();const U=b=>{if(!ru.has(b))ru.set(b,URL.createObjectURL(b));return ru.get(b)};
@@ -959,44 +1013,32 @@ function show(i,history=false){
 }
 $('#wbRes').onclick=e=>{const b=e.target.closest('[data-ri]');b&&show(+b.dataset.ri)};$('#wbCmpT').onclick=()=>{W.cmp=!W.cmp;show(W.ri,fromHistory)};
 $('#wbZip').onclick=async()=>{if(!window.makeZip)return;const ts=stamp(new Date());const fs=W.results.map((r,i)=>({name:`posewear-${r.mode=='gen'?'gen':'tryon'}-${ts}-${String(i+1).padStart(2,'0')}.png`,blob:r.after}));window.X.dl(await makeZip(fs),`posewear-tryon-${ts}.zip`);toast('已打包 {count} 张',null,{count:fs.length})};
-function exportSettings(local){
- // ローカル試着のエクスポートには、以前に使用したクラウドのキーや接続先を含めません。
- const withKey=!local&&confirm(t('导出时包含 API Key 吗？\n确定 = 包含，取消 = 不含密钥'));
- const o=local?{prov:'comfy'}:{...cfg,prov:cfg.prov=='comfy'?cfg.cloudProv||'openai':cfg.prov};
- if(!withKey)delete o.key;
- const value={app:'衣姿 PoseWear',type:'api-config',cfg:o};
- if(local)value.comfy=comfyState;
- window.X.dl(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}),t('衣姿-API设置.json'));
- msg(withKey?'已导出设置（含密钥，请妥善保管）':'已导出设置（不含密钥）');
-}
-$('#cfExp').onclick=()=>exportSettings(false);
-$('#cfComfyExport').onclick=()=>exportSettings(true);
-$('#cfImp').onclick=$('#cfComfyImport').onclick=()=>$('#cfImpF').click();
-$('#cfImpF').onchange=async e=>{
- const file=e.target.files[0],revision=++configRevision;
- e.target.value='';
+// ComfyUI の設定画面からはローカル接続だけを書き出し、クラウドの接続情報を混ぜません。
+$('#cfExp').onclick=()=>{
+ const localOnly=currentProvider()==='comfy';
+ const withKeys=!localOnly&&confirm(t('导出时包含 API Key 吗？\n确定 = 包含，取消 = 不含密钥'));
+ const backup=generationStore.exportBackup(genState,withKeys,localOnly);
+ window.X.dl(new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}),t('衣姿-API设置.json'));
+ msg(withKeys?'已导出设置（含密钥，请妥善保管）':'已导出设置（不含密钥）');
+};
+$('#cfImp').onclick=()=>$('#cfImpF').click();
+$('#cfImpF').onchange=async event=>{
+ const file=event.target.files[0],revision=++configRevision;
+ event.target.value='';
  if(!file)return;
  try{
-  const j=JSON.parse(await file.text()),o=j.cfg||j;
-  if(revision!=configRevision)return;
+  const backup=JSON.parse(await file.text());
+  if(revision!==configRevision)return;
   if(W.busy)return msg('请等待当前生成完成。',1);
-  if(!Object.hasOwn(PROV,o.prov))throw Error('invalid provider');
-  if(o.prov=='comfy'){
-   if(comfyState.workflows.length&&!confirm(t('用备份替换全部已注册的工作流？')))return;
-   useComfyState(workflowStore.replace(j.comfy));setComfyProvider();
-   cfgClose();comfyOpen();
-  }else{
-   // インポートでは既知の設定項目だけを反映します。
-   for(const key of ['prov','base','key','model','field','proto','proxy']){
-    if(typeof o[key]==typeof cfg[key])cfg[key]=o[key];
-   }
-   // 旧形式のバックアップに任意項目がないときはモデル既定の空欄に戻します。
-   for(const key of ['quality','complexity'])cfg[key]=typeof o[key]=='string'?o[key].trim():'';
-   comfyClose();cloudCfgOpen();
-  }
-  SV('wbCfg',cfg);render();msg('已导入设置');
+  const all=backup?.type==='generation-settings'&&backup.scope==='all';
+  const local=backup?.scope==='comfy'||backup?.cfg?.prov==='comfy';
+  const question=all?'用备份替换已保存的连接和生成设置？':local?'用备份恢复 ComfyUI 连接和生成设置？':'导入此连接和生成设置？';
+  if(genState.connections.length&&!confirm(t(question)))return;
+  // 保存先の検証が成功してから、試着画面と編集中の設定の両方を更新します。
+  applySettings(generationStore.importBackup(genState,backup));
+  refreshSettings();render(true);msg('已导入设置');
  }catch(error){
-  if(revision==configRevision)msg(error.code?()=>comfyError(error):'导入失败：文件格式不正确',1);
+  if(revision===configRevision)msg('导入失败：文件格式不正确',1);
  }
 };
 $('#wbDl').onclick=()=>{const r=W.results[W.ri];if(!r)return;const l=document.createElement('a');l.href=U(r.after);l.download=`posewear-${r.mode=='gen'?'gen':'tryon'}-${stamp(new Date(r.t))}-${String(W.ri+1).padStart(2,'0')}.png`;l.click()};
@@ -1061,17 +1103,15 @@ window.WB={async show(){await init();render()},async pick(it){await init();if(it
 addEventListener('uilocalechange',()=>{
  if(inited)render(true);
  if(!$('#cfg').hidden){
-  cfgLabels($('[name=prov]:checked')?.value||cfg.prov);
-  if(modelStatus)$('#cfModelStatus').textContent=modelStatus();
-  if(cfgMessage)$('#cfMsg').textContent=cfgMessage();
- }
- if(!$('#comfyManager').hidden){
+  cfgLabels(currentProvider());
+  $('#cfConnection').options[0].textContent=t('新建连接');
+  $('#cfProfile').options[0].textContent=t('新建生成设置');
   $('#cfComfyName').textContent=comfyDraft.fileName||t('尚未选择文件');
-  $('#cfComfySaved').options[0].textContent=t('选择已注册的工作流');
   for(const [,selector,required] of COMFY_BINDINGS){
    $(selector).options[0].textContent=t(required?'请选择节点':'不指定节点');
   }
-  if(cfgMessage)$('#cfComfyMsg').textContent=cfgMessage();
+  if(modelStatus)$('#cfModelStatus').textContent=modelStatus();
+  if(cfgMessage)$('#cfMsg').textContent=cfgMessage();
  }
  if(!$('#pk').hidden){
   pickerTitle();
@@ -1085,7 +1125,7 @@ addEventListener('uilocalechange',()=>{
 });
 if(document.body.classList.contains('studio'))WB.show();
 if(location.hash=='#studio'){const t0=()=>scrollTo(0,0);requestAnimationFrame(t0);addEventListener('load',()=>setTimeout(t0,0),{once:true})}
-addEventListener('keydown',e=>{if(e.key=='Escape'){if(!$('#pk').hidden)pkClose();else if(!$('#comfyManager').hidden)comfyClose();else if(!$('#cfg').hidden)cfgClose()}});
+addEventListener('keydown',e=>{if(e.key=='Escape'){if(!$('#pk').hidden)pkClose();else if(!$('#cfg').hidden)cfgClose()}});
 })();
 // v10：手机端把密钥引导卡放到第 1 步之前
 (()=>{const mq=matchMedia('(max-width:760px)'),o=document.getElementById('wbOnb');if(!o)return;const place=()=>{if(mq.matches){const s1=document.querySelector('.st-l [data-s="1"]');s1&&s1.parentNode.insertBefore(o,s1)}else document.querySelector('.st-c').prepend(o)};place();mq.addEventListener('change',place)})();

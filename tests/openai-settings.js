@@ -15,7 +15,7 @@ async function main() {
 
     // 旧版の保存設定には画質・検討量がない。空のAPIキーでもモデル名を編集できる。
     await page.addInitScript(() => {
-      if (!localStorage.wbCfg) {
+      if (!localStorage.wbCfg && !localStorage.wbGenerationSettings) {
         localStorage.wbCfg = JSON.stringify({ prov: 'openai', key: '', model: 'old-manual-id' });
       }
     });
@@ -64,7 +64,11 @@ async function main() {
     const quality = page.locator('#cfQuality');
     const complexity = page.locator('#cfComplexity');
     const open = () => page.locator('#wbCfg').click();
-    const save = () => page.locator('#cfSave').click();
+    const save = async () => {
+      // 保存と使用を分けた管理画面で、保存してから閉じます。
+      await page.click('#cfSave');
+      await page.click('#cfgX');
+    };
     await page.goto((process.env.U || 'http://localhost:8787') + '/#studio');
     await open();
     assert.equal(await quality.inputValue(), '');
@@ -74,7 +78,7 @@ async function main() {
     await open();
     assert.equal(await model.inputValue(), 'keyless-manual-id');
 
-    // 設定を保存する前でも、新しく入力したキーと接続先から取得する。
+    // 接続の保存前でも、編集中のキーと接続先を使ってモデル一覧を取得します。
     await page.locator('#cfKey').fill('sk-openai-settings-test');
     await page.locator('#cfBase').fill(mockEndpoint);
     const pending = page.waitForRequest(r => r.headers()['x-target-url'] === mockEndpoint + '/models');
@@ -89,6 +93,7 @@ async function main() {
     assert.equal(await model.inputValue(), 'manual-while-loading');
     await list.selectOption('gpt-image-new');
     assert.equal(await model.inputValue(), 'gpt-image-new');
+    await page.click('#cfConnectionSave');
     await save();
 
     // 一覧を取得できない場合にも、手入力したモデルが再読み込み後の試着に使われる。

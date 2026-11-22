@@ -128,7 +128,7 @@ body.tray .foot{padding-bottom:300px}
 #toast{position:fixed;left:50%;bottom:32px;transform:translate(-50%,14px);opacity:0;background:rgba(17,17,17,.92);color:#fff;padding:11px 22px;border-radius:99px;transition:transform .35s var(--out),opacity .25s;z-index:99;pointer-events:none;font-size:13.5px;box-shadow:var(--sh2)}
 #toast.on{opacity:1;transform:translate(-50%,0)}body.tray:not(.studio) #toast{bottom:auto;top:calc(var(--hdr,72px) + 14px)}
 #toTop{position:fixed;left:24px;bottom:24px;z-index:25;background:var(--bg2);box-shadow:var(--sh2);opacity:0;pointer-events:none;transition:opacity .3s}#toTop.on{opacity:1;pointer-events:auto}
-#helpBox,#pk,#cfg,#comfyManager{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:rgba(0,0,0,.45);padding:20px;animation:fade .2s both}
+#helpBox,#pk,#cfg{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:rgba(0,0,0,.45);padding:20px;animation:fade .2s both}
 #helpBox[hidden],#pk[hidden],#cfg[hidden],[hidden]{display:none!important}
 .hb{background:var(--bg2);padding:28px 30px;width:min(440px,100%);box-shadow:var(--sh3);border-radius:22px}.hb h3{font-size:20px;margin-bottom:14px}
 .hb dl{display:grid;grid-template-columns:auto 1fr;gap:9px 18px;margin:0 0 22px;font-size:13.5px}.hb dd{margin:0;color:var(--tx2)}.hb .pri{width:100%}
@@ -233,7 +233,7 @@ textarea{width:100%;font:13.5px/1.7 var(--sans);color:var(--tx);background:var(-
  .fi{grid-template-columns:1fr;gap:22px}
  #studio{padding:14px 12px 30px}.st-head{flex-direction:column;align-items:stretch;gap:14px}.st-head h2{font-size:24px}.modes{display:flex}.modes button{flex:1}
  .step{padding:16px;border-radius:18px}.stage,.cmp{min-height:420px}
- .prov{grid-template-columns:1fr 1fr}.pk-g{grid-template-columns:repeat(3,1fr);padding:6px 14px 14px;gap:12px 8px}#pk,#cfg,#comfyManager{padding:0;place-items:end stretch}.pk-box,.cfg-box{max-height:90vh;border-radius:22px 22px 0 0}
+ .prov{grid-template-columns:1fr 1fr}.pk-g{grid-template-columns:repeat(3,1fr);padding:6px 14px 14px;gap:12px 8px}#pk,#cfg{padding:0;place-items:end stretch}.pk-box,.cfg-box{max-height:90vh;border-radius:22px 22px 0 0}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 body.studio .tools{margin-left:auto}
@@ -571,7 +571,7 @@ button:active:not(:disabled){transform:scale(.97)}.tabs button:active,.chip:acti
 .tray-items{max-height:132px;overflow:auto}
 #cfHelp:empty{display:none}
 #trayN{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-body:has(#cfg:not([hidden]),#comfyManager:not([hidden])) #toast{bottom:calc(84px + env(safe-area-inset-bottom))}
+body:has(#cfg:not([hidden])) #toast{bottom:calc(84px + env(safe-area-inset-bottom))}
 #wbErr .raw{margin-top:10px;font-size:12px;color:var(--tx2)}#wbErr .raw summary{cursor:pointer;width:max-content}
 #wbErr .raw pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:140px;overflow:auto;background:var(--sf);border-radius:10px;padding:8px 10px;margin:8px 0 6px;font-size:11.5px}
 #wbErr p+p.fine{margin-top:-4px}
@@ -604,7 +604,7 @@ body:has(#cfg:not([hidden]),#comfyManager:not([hidden])) #toast{bottom:calc(84px
 }
 
 /* 翻訳でラベルが長くなっても、試着の各列とダイアログを画面幅に収めます。 */
-#studio .step .sh, #studio .q2 .row, :is(#cfg,#comfyManager) .cfg-f { flex-wrap: wrap; }
+#studio .step .sh, #studio .q2 .row, #cfg .cfg-f { flex-wrap: wrap; }
 #studio .q2 .lab, #studio .q2 select { min-width: 0; }
 #wbCharTxt, #wbExtra { min-height: 6.25em; }
 #pkQ { min-width: 0; }
@@ -620,8 +620,8 @@ body:has(#cfg:not([hidden]),#comfyManager:not([hidden])) #toast{bottom:calc(84px
   #pk .pk-h { flex-wrap: wrap; gap: 8px; }
   #pkT { flex: 1 0 calc(100% - 52px); order: -2; }
   #pkX { order: -1; }
-  :is(#cfg,#comfyManager) .cfg-f { padding-inline: 14px; }
-  :is(#cfg,#comfyManager) .cfg-f .sp { flex: 0 0 100%; height: 0; }
+  #cfg .cfg-f { padding-inline: 14px; }
+  #cfg .cfg-f .sp { flex: 0 0 100%; height: 0; }
   #cfTest { margin-left: auto; }
 }
 
@@ -655,3 +655,23 @@ body:has(#cfg:not([hidden]),#comfyManager:not([hidden])) #toast{bottom:calc(84px
 #wbWorkflowControls{display:flex;align-items:end;gap:8px;flex-wrap:wrap}
 #wbWorkflowWrap{flex:1;min-width:0}
 #wbWorkflow{max-width:100%}
+
+/* 接続と生成設定を別々に保存できるように、各欄と操作を同じセクションにまとめます。 */
+#cfg .settings-section, #cfg .settings-fields{display:grid;gap:10px;min-width:0}
+#cfg .settings-section + .settings-section{border-top:1px solid var(--line);padding-top:16px;margin-top:6px}
+#cfg .settings-section h3{margin:0;font-size:16px}
+#cfg .setting-controls, #cfg .optional-setting{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:8px}
+#cfg .setting-controls select{min-width:0;width:100%;font:inherit;color:var(--tx);background:var(--sf);border:1px solid var(--line);border-radius:12px;padding:8px}
+#cfg .prov:has(input:disabled) label:has(input:not(:checked)){display:none}
+#cfg .prov:has(input:disabled) label{cursor:default}
+#cfg .kw input{min-width:0}
+#cfg .setting-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+#cfMsg{margin:0;overflow-wrap:anywhere;flex:1}
+@media(max-width:520px){#cfg .cfg-f .sp{display:none}#cfg .optional-setting{align-items:center}}
+
+/* 広い画面では、接続と生成設定を見比べながら編集できます。 */
+@media(min-width:900px){
+ #cfg:has(#cfProfileSection:not([hidden])) .cfg-box{width:min(980px,95vw)}
+ #cfg:has(#cfProfileSection:not([hidden])) .cfg-b{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);align-items:start;gap:24px}
+ #cfg .settings-section + .settings-section{border-top:0;border-left:1px solid var(--line);margin:0;padding:0 0 0 20px}
+}

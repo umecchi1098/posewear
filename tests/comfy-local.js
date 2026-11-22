@@ -101,13 +101,17 @@ async function main() {
 
     await page.goto(new URL('/#studio', site).href);
     await page.locator('#wbCfg').click();
+    await page.click('#cfConnectionNew');
     await page.locator('label:has([name=prov][value=comfy])').click();
+    await page.fill('#cfConnectionName', 'ローカルPC');
     assert.ok(await page.locator('#cfKey').isHidden());
-    await page.locator('#cfComfyBase').fill(endpoint);
-    await page.locator('#cfComfyTest').click();
-    await page.locator('#cfComfyMsg.good, #cfComfyMsg.bad').filter({ hasNotText: '接続中' }).waitFor();
+    await page.locator('#cfBase').fill(endpoint);
+    await page.click('#cfConnectionSave');
+    const localId = await page.inputValue('#cfConnection');
+    await page.locator('#cfTest').click();
+    await page.locator('#cfMsg.good, #cfMsg.bad').filter({ hasNotText: '接続中' }).waitFor();
     // 接続失敗時は、画面の理由とブラウザーが報告した通信エラーを表示します。
-    assert.equal(await page.locator('#cfComfyMsg').innerText(), 'ComfyUI に接続できました。',
+    assert.equal(await page.locator('#cfMsg').innerText(), 'ComfyUI に接続できました。',
       '接続テスト: ' + [...requestFailures, ...browserMessages].filter(message => message.includes(endpoint)).join(', ') +
       ' リクエスト: ' + requests.map(r => r.path + ' from ' + r.headers.origin).join(', '));
     assert.deepEqual(requests.map(r => r.path), ['/system_stats']);
@@ -128,44 +132,41 @@ async function main() {
     await page.locator('#cfComfyPerson').selectOption('1');
     await page.locator('#cfComfyGarment').selectOption('1');
     assert.equal(await page.locator('#cfComfyOutput').inputValue(), '14');
-    await page.locator('#cfComfySave').click();
+    await page.locator('#cfSave').click();
     await page.getByText('人物用と服装用に別々の LoadImage ノードを選び、SaveImage ノードを1つ選択してください。', { exact: true }).waitFor();
     assert.equal(requests.length, 1);
 
     await page.locator('#cfComfyGarment').selectOption('2');
-    await page.locator('#cfComfySave').click();
-    assert.ok(await page.locator('#comfyManager').isVisible());
-    const readSaved = () => page.evaluate(() => ({
-      settings: JSON.parse(localStorage.getItem('wbComfy')),
-      provider: JSON.parse(localStorage.getItem('wbCfg')).prov
-    }));
+    await page.locator('#cfSave').click();
+    assert.ok(await page.locator('#cfg').isVisible());
+    const readSaved = () => page.evaluate(() => JSON.parse(localStorage.wbGenerationSettings));
     const initial = await readSaved();
-    assert.equal(initial.settings.workflows.length, 1);
-    assert.equal(initial.settings.activeId, null);
-    assert.equal(initial.provider, 'openai');
-    const legacySampleId = await page.inputValue('#cfComfySaved');
-    assert.equal(legacySampleId, initial.settings.workflows[0].id);
+    assert.equal(initial.profiles.filter(profile => profile.connectionId === localId).length, 1);
+    const legacySampleId = await page.inputValue('#cfProfile');
+    const originalProfile = initial.profiles.find(profile => profile.id === initial.activeId);
+    assert.notEqual(legacySampleId, initial.activeId);
+    assert.equal(initial.connections.find(connection => connection.id === originalProfile.connectionId).prov, 'openai');
+    const localProfile = initial.profiles.find(profile => profile.id === legacySampleId);
 
     // 未保存の変更があれば、「使う」では確定せず、管理画面で保存を案内します。
-    await page.fill('#cfComfyProfileName', '未保存の名前');
-    await page.click('#cfComfyUse');
-    assert.ok(await page.locator('#comfyManager').isVisible());
-    assert.equal(await page.locator('#cfComfyMsg').innerText(), '変更を先に保存してください');
+    await page.fill('#cfProfileName', '未保存の名前');
+    await page.click('#cfUse');
+    assert.ok(await page.locator('#cfg').isVisible());
+    assert.equal(await page.locator('#cfMsg').innerText(), '変更を先に保存してください');
     assert.deepEqual(await readSaved(), initial);
-    await page.fill('#cfComfyProfileName', initial.settings.workflows[0].name);
-    await page.click('#cfComfyUse');
-    await page.locator('#comfyManager').waitFor({ state: 'hidden' });
-    assert.equal((await readSaved()).settings.activeId, legacySampleId);
-    assert.equal((await readSaved()).provider, 'comfy');
+    await page.fill('#cfProfileName', localProfile.name);
+    await page.click('#cfUse');
+    await page.locator('#cfg').waitFor({ state: 'hidden' });
+    assert.equal((await readSaved()).activeId, legacySampleId);
 
     await page.reload();
     await page.locator('#wbCfg').click();
-    assert.equal(await page.locator('#cfComfyBase').inputValue(), endpoint);
+    assert.equal(await page.locator('#cfBase').inputValue(), endpoint);
     assert.equal(await page.locator('#cfComfyName').innerText(), sampleName);
     assert.equal(await page.locator('#cfComfyPerson').inputValue(), '1');
     assert.equal(await page.locator('#cfComfyGarment').inputValue(), '2');
     assert.equal(await page.locator('#cfComfyOutput').inputValue(), '14');
-    await page.locator('#cfComfyX').click();
+    await page.locator('#cfgX').click();
 
     await page.locator('#wbFile').setInputFiles(path.join(fixtures, 'person.png'));
     await page.locator('#wbGFile').setInputFiles(path.join(fixtures, 'mk2.png'));
@@ -202,13 +203,12 @@ async function main() {
     assert.match(await page.locator('#wbMeta').innerText(), /ComfyUI.*try-on-qwen-2509-api/);
     assert.ok(await page.locator('#wbSentD').isHidden());
     await page.locator('#wbCfg').click();
-    await page.locator('#cfComfyProviders').click();
-    await page.locator('label:has([name=prov][value=openai])').click();
+    await page.selectOption('#cfConnection', originalProfile.connectionId);
     assert.equal(await page.locator('#cfKey').inputValue(), cloudKey);
     assert.equal(await page.locator('#cfModel').inputValue(), 'gpt-image-1-mini');
     // 同じ人物と衣装でポーズを2つ選び、各2枚の送信内容と履歴を確認します。
-    await page.locator('label:has([name=prov][value=comfy])').click();
-    await page.click('#cfComfyNew');
+    await page.selectOption('#cfConnection', localId);
+    await page.click('#cfProfileNew');
     const poseFile = 'posewear-qwen21-pose-api.json';
     const poseWorkflow = await page.request.get(new URL('/workflows/' + poseFile, site).href);
     assert.equal(poseWorkflow.status(), 200);
@@ -219,13 +219,13 @@ async function main() {
     for (const [role, id] of Object.entries({
       Person:'470', Garment:'475', Pose:'490', Output:'461', Prompt:'488', Aspect:'13', Seed:'459:458'
     })) assert.equal(await page.inputValue('#cfComfy' + role), id);
-    await page.fill('#cfComfyProfileName', 'Qwen・PEあり');
-    await page.click('#cfComfySave');
-    const enhancedId = await page.inputValue('#cfComfySaved');
-    assert.equal((await readSaved()).settings.activeId, legacySampleId);
+    await page.fill('#cfProfileName', 'Qwen・PEあり');
+    await page.click('#cfSave');
+    const enhancedId = await page.inputValue('#cfProfile');
+    assert.equal((await readSaved()).activeId, legacySampleId);
 
     // PEなしも別名で登録し、管理画面からPEありを選び直して生成します。
-    await page.click('#cfComfyNew');
+    await page.click('#cfProfileNew');
     const noPeFile = 'posewear-qwen21-pose-no-pe-api.json';
     const [noPeDownload] = await Promise.all([
       page.waitForEvent('download'), page.click('a[download][href$="' + noPeFile + '"]')
@@ -234,14 +234,14 @@ async function main() {
       name: noPeFile, mimeType: 'application/json', buffer: await fs.readFile(await noPeDownload.path())
     });
     await page.waitForFunction(() => document.querySelector('#cfComfyPose').value === '490');
-    await page.fill('#cfComfyProfileName', 'Qwen・PEなし');
-    await page.click('#cfComfySave');
-    const directId = await page.inputValue('#cfComfySaved');
+    await page.fill('#cfProfileName', 'Qwen・PEなし');
+    await page.click('#cfSave');
+    const directId = await page.inputValue('#cfProfile');
     assert.notEqual(enhancedId, directId);
-    assert.ok(await page.locator('#comfyManager').isVisible());
-    assert.equal((await readSaved()).settings.activeId, legacySampleId);
-    await page.selectOption('#cfComfySaved', enhancedId);
-    assert.equal((await readSaved()).settings.activeId, legacySampleId);
+    assert.ok(await page.locator('#cfg').isVisible());
+    assert.equal((await readSaved()).activeId, legacySampleId);
+    await page.selectOption('#cfProfile', enhancedId);
+    assert.equal((await readSaved()).activeId, legacySampleId);
     // 管理画面の3つのノード選択欄が、画面幅によらず同じ列に並ぶことを確認します。
     for (const width of [1280, 390]) {
       await page.setViewportSize({width, height: 900});
@@ -256,9 +256,9 @@ async function main() {
         boxes[1].y + boxes[1].height <= boxes[2].y, `ノード選択欄が縦に並びます (幅 ${width})`);
     }
     await page.setViewportSize({width: 1280, height: 900});
-    await page.click('#cfComfyUse');
-    await page.locator('#comfyManager').waitFor({ state: 'hidden' });
-    assert.equal((await readSaved()).settings.activeId, enhancedId);
+    await page.click('#cfUse');
+    await page.locator('#cfg').waitFor({ state: 'hidden' });
+    assert.equal((await readSaved()).activeId, enhancedId);
     assert.equal(await page.inputValue('#wbWorkflow'), enhancedId);
     await page.setInputFiles('#wbFile', path.join(fixtures, 'person.png'));
     await page.setInputFiles('#wbGFile', path.join(fixtures, 'mk2.png'));
@@ -336,45 +336,46 @@ async function main() {
     assert.equal(poseUploads, 4);
 
     // 名前を変更してから削除しても、生成時の名前を履歴から確認できます。
-    await page.click('#wbWorkflowManage');
-    await page.fill('#cfComfyProfileName', 'PEなし 改名');
-    await page.click('#cfComfySave');
-    assert.equal(await page.inputValue('#cfComfySaved'), directId);
-    const [backupFile] = await Promise.all([page.waitForEvent('download'), page.click('#cfComfyExport')]);
+    await page.click('#wbCfg');
+    await page.fill('#cfProfileName', 'PEなし 改名');
+    await page.click('#cfSave');
+    assert.equal(await page.inputValue('#cfProfile'), directId);
+    const [backupFile] = await Promise.all([page.waitForEvent('download'), page.click('#cfExp')]);
     const backup = await fs.readFile(await backupFile.path(), 'utf8');
     assert.ok(!backup.includes(cloudKey));
-    assert.equal(JSON.parse(backup).comfy.workflows.length, 3);
+    assert.equal(JSON.parse(backup).settings.profiles.filter(profile => profile.connectionId === localId).length, 3);
     page.once('dialog', dialog => dialog.accept());
-    await page.click('#cfComfyDelete');
-    assert.notEqual(await page.inputValue('#cfComfySaved'), directId);
-    await page.click('#cfComfyX');
+    await page.click('#cfDelete');
+    assert.notEqual(await page.inputValue('#cfProfile'), directId);
+    await page.click('#cfgX');
     await page.locator('#wbHist [data-t]').first().click();
     assert.match(await page.innerText('#wbMeta'), /Qwen・PEなし/);
-    await page.click('#wbWorkflowManage');
+    await page.click('#wbCfg');
     page.once('dialog', dialog => dialog.accept());
     await page.setInputFiles('#cfImpF', {
       name: 'settings.json', mimeType: 'application/json', buffer: Buffer.from(backup)
     });
-    await page.waitForFunction(id => document.querySelector('#cfComfySaved').value === id, directId);
-    assert.equal(await page.inputValue('#cfComfyProfileName'), 'PEなし 改名');
+    await page.waitForFunction(id => document.querySelector('#cfProfile').value === id, directId);
+    assert.equal(await page.inputValue('#cfProfileName'), 'PEなし 改名');
 
     // 以前の単一設定を持つブラウザーでも、再登録せず元の割り当てを使えます。
     await page.evaluate(({base, workflow, name}) => {
+      localStorage.removeItem('wbGenerationSettings');
+      localStorage.wbCfg = JSON.stringify({ prov: 'comfy' });
       localStorage.setItem('wbComfy', JSON.stringify({
         base, workflow, name, mapping: {person: '1', garment: '2', output: '14'}
       }));
     }, {base: endpoint, workflow: sample, name: sampleName});
     await page.reload();
-    await page.click('#wbWorkflowManage');
+    await page.click('#wbCfg');
     assert.equal(await page.textContent('#cfComfyName'), sampleName);
     assert.equal(await page.inputValue('#cfComfyGarment'), '2');
-    await page.click('#cfComfySave');
+    await page.click('#cfSave');
     assert.equal(await page.locator('#wbWorkflow option').count(), 1);
     page.once('dialog', dialog => dialog.accept());
-    await page.click('#cfComfyDelete');
-    await page.click('#cfComfyX');
-    assert.ok(await page.locator('#wbWorkflowWrap').isHidden());
-    assert.ok(await page.locator('#wbWorkflowManage').isVisible());
+    await page.click('#cfDelete');
+    await page.click('#cfgX');
+    assert.ok(await page.locator('#wbCfg').isVisible());
     assert.deepEqual(proxyRequests, []);
     assert.deepEqual(errors, []);
     console.log('ComfyUI browser regression passed (local HTTP mock, CORS, workflow, history, key isolation).');
