@@ -2,6 +2,14 @@
 
 // 試着スタジオの表示文言。各項目は英語と日本語の順です。
 window.UI.register({
+  "图像模型候选": ["Image model options", "画像モデル候補"],
+  "画质": ["Quality", "画質"],
+  "规划复杂度": ["Planning complexity", "描画前の検討量"],
+  "模型默认值": ["Model default", "モデル既定"],
+  "正在获取模型…": ["Loading models…", "モデル候補を取得中…"],
+  "未找到图像模型。": ["No image models found.", "画像モデル候補が見つかりませんでした。"],
+  "模型列表格式不正确。": ["Invalid model list response.", "モデル一覧の応答形式が正しくありません。"],
+  "无法获取模型列表：{reason}": ["Could not load models: {reason}", "モデル候補を取得できませんでした。{reason}"],
   "无法保存试穿记录，请下载结果图片。": ["Could not save your try-on history. Download the generated image.", "試着履歴を保存できませんでした。結果画像をダウンロードしてください。"],
   "本地试穿": ["Local try-on", "ローカル試着"],
   "ComfyUI 地址": ["ComfyUI address", "ComfyUI の接続先"],

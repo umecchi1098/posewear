@@ -81,6 +81,10 @@
 <div id="cfCloud" style="display:contents"><div class="grp">连接</div><label class="fld">Base URL<input id="cfBase" placeholder="https://api.openai.com" spellcheck="false"></label>
 <label class="fld">API Key<span class="kw"><input id="cfKey" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false"><button class="sm ghost" id="cfEye" type="button">显示</button></span></label>
 <label class="fld">模型<input id="cfModel" list="cfModels" spellcheck="false"><datalist id="cfModels"></datalist></label>
+<div class="fld" id="cfOpenAIList" hidden><select id="cfOpenAIModels" size="4" aria-label="图像模型候选" translate="no"></select></div>
+<p class="fine" id="cfModelStatus" role="status" hidden></p>
+<label class="fld" id="cfQualityW" hidden>画质<input id="cfQuality" list="cfQualities" placeholder="模型默认值" spellcheck="false"><datalist id="cfQualities"><option value="auto"></option><option value="low"></option><option value="medium"></option><option value="high"></option><option value="xhigh"></option><option value="max"></option></datalist></label>
+<label class="fld" id="cfComplexityW" hidden>规划复杂度<input id="cfComplexity" list="cfComplexities" placeholder="模型默认值" spellcheck="false"><datalist id="cfComplexities"><option value="low"></option><option value="medium"></option><option value="high"></option></datalist></label>
 <div class="grp">高级</div><label class="fld" id="cfProtoW">接口协议<select id="cfProto"><option value="edits">images/edits · multipart（OpenAI 官方格式）</option><option value="json">images/generations · JSON 多图（多数中转 / gpt-image-2）</option></select></label><label class="fld" id="cfFieldW">图片字段名<select id="cfField"><option value="image[]">image[]（官方，多图）</option><option value="image">image（部分中转）</option></select></label>
 <label class="tg"><input type="checkbox" id="cfProxy"><span><b>通过本站代理转发</b><small>中转不支持跨域（CORS）时再打开。只转发，不保存。自定义中转总是经本站转发。</small></span></label>
 <div class="note"><b>密钥</b>只存在这个浏览器里，请求直接发给你填的地址。用公共电脑记得清除。</div></div>

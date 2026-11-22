@@ -6,12 +6,12 @@ const locale=()=>({zh:'zh-CN',en:'en',ja:'ja'}[UI.locale]);
 const provider=id=>t(PROV[id]?.name||id||'');
 const LS=k=>{try{return JSON.parse(localStorage[k]||'null')}catch(e){return null}},SV=(k,v)=>{try{localStorage[k]=JSON.stringify(v)}catch(e){}};
 // ---------- 服务商 ----------
-const PROV={openai:{name:'OpenAI',base:'https://api.openai.com/v1',model:'gpt-image-1',models:['gpt-image-1','gpt-image-1-mini','gpt-image-2','dall-e-2']},
+const PROV={openai:{name:'OpenAI',base:'https://api.openai.com/v1',model:'gpt-image-1',models:[]},
  gemini:{name:'Gemini',base:'https://generativelanguage.googleapis.com/v1beta',model:'gemini-2.5-flash-image',models:['gemini-2.5-flash-image','gemini-3-pro-image-preview','gemini-3.1-flash-image']},
  seedream:{name:'豆包 Seedream',base:'https://ark.cn-beijing.volces.com/api/v3',model:'doubao-seedream-4-0-250828',models:['doubao-seedream-4-0-250828','doubao-seedream-4-5-251128','doubao-seedream-5-0-flash-260915']},
  comfy:{name:'ComfyUI',base:'http://127.0.0.1:8188',model:'',models:[]},
  custom:{name:'自定义中转',base:'',model:'gpt-image-1',models:['gpt-image-1','gpt-image-2','gemini-2.5-flash-image','flux-kontext-pro','qwen-image-edit','doubao-seedream-4-0-250828']}};
-const cfg=Object.assign({prov:'openai',base:'',key:'',model:'',field:'image[]',proto:'edits',proxy:false},LS('wbCfg')||{});
+const cfg=Object.assign({prov:'openai',base:'',key:'',model:'',quality:'',complexity:'',field:'image[]',proto:'edits',proxy:false},LS('wbCfg')||{});
 // ローカル設定を分け、クラウドのキーや接続情報を ComfyUI に渡さないようにします。
 const workflowStore=window.ComfyWorkflows;
 let comfyState=workflowStore.load(),comfy=workflowStore.active(comfyState);
@@ -437,6 +437,8 @@ const cfgLink=(url,label)=>`<a href="${url}" target="_blank" rel="noopener">${es
 function cfgLabels(prov){
  const P=PROV[prov];
  const local=prov=='comfy';
+ // OpenAI の任意項目は、ほかのサービスの設定を編集するときには隠します。
+ $('#cfQualityW').hidden=$('#cfComplexityW').hidden=prov!='openai';
  $('#cfCloud').hidden=local;$('#cfCloudFooter').hidden=local;
  if(local){$('#cfHelp').textContent='';return}
  $('#cfBase').placeholder=P.base||t('https://你的中转地址/v1');
@@ -450,6 +452,53 @@ function cfgLabels(prov){
  };
  $('#cfHelp').innerHTML=help[prov]();
 }
+// 接続先が変わった後に、以前の候補や遅れて届いた応答を表示しないようにします。
+let modelListRevision=0, modelStatus=null;
+function resetModelList(){
+ modelListRevision++;
+ $('#cfOpenAIModels').replaceChildren();
+ $('#cfOpenAIList').hidden=true;
+ modelStatus=null;
+ $('#cfModelStatus').textContent='';
+ $('#cfModelStatus').hidden=true;
+}
+$('#cfModel').onfocus=async()=>{
+ const draft=cfgRead();
+ if(draft.prov!='openai')return;
+ resetModelList();
+ if(!draft.key)return;
+ const revision=modelListRevision;
+ const status=$('#cfModelStatus');
+ modelStatus=()=>t('正在获取模型…');
+ status.textContent=modelStatus();status.hidden=false;
+ try{
+  // 接続テストと同じ認証・プロキシ設定を使い、保存前の接続先も反映します。
+  const response=await call(root(draft)+'/models',{method:'GET',headers:auth(draft)},draft);
+  const body=await response.json().catch(()=>null);
+  if(!response.ok)throw await apiErr(response,body,draft);
+  if(revision!=modelListRevision)return;
+  if(!Array.isArray(body?.data))throw imageError('模型列表格式不正确。');
+  const models=body.data.filter(item=>typeof item?.id=='string'&&item.id.startsWith('gpt-image-'))
+   .sort((a,b)=>(b.created||0)-(a.created||0));
+  // 自由入力欄は変更せず、保存済みの名前に関係なく全候補を選べるようにします。
+  const list=$('#cfOpenAIModels');
+  list.replaceChildren(...models.map(model=>new Option(model.id,model.id)));
+  list.selectedIndex=-1;
+  $('#cfOpenAIList').hidden=!models.length;
+  modelStatus=models.length?null:()=>t('未找到图像模型。');
+ }catch(error){
+  if(revision!=modelListRevision)return;
+  modelStatus=()=>t('无法获取模型列表：{reason}',{reason:nice(error)});
+ }
+ status.textContent=modelStatus?modelStatus():'';
+ status.hidden=!modelStatus;
+};
+$('#cfOpenAIModels').onchange=event=>{$('#cfModel').value=event.target.value};
+// 手入力に切り替えたらリストの選択を外し、直前と同じ候補も選び直せるようにします。
+$('#cfModel').oninput=()=>{$('#cfOpenAIModels').selectedIndex=-1};
+for(const selector of ['#cfKey','#cfBase','#cfProxy']){
+ $(selector).addEventListener('input',resetModelList);
+}
 let cfgMessage;
 function cfgFill(){
 
@@ -459,14 +508,23 @@ function cfgFill(){
  $('#cfKey').type='password';
  $('#cfBase').value=cfg.base;$('#cfKey').value=cfg.key;
  $('#cfModel').value=cfg.model;$('#cfModel').placeholder=P.model;
- $('#cfModels').innerHTML=P.models.map(m=>`<option value="${m}">`).join('');
+ resetModelList();
+ $('#cfQuality').value=cfg.quality;$('#cfComplexity').value=cfg.complexity;
+ $('#cfModels').replaceChildren(...P.models.map(m=>new Option(m,m)));
  $('#cfField').value=cfg.field;$('#cfProto').value=cfg.proto;$('#cfProtoW').hidden=cloud!='custom';
  $('#cfFieldW').hidden=!(cloud=='custom'&&cfg.proto=='edits');$('#cfProxy').checked=cfg.proxy;
  cfgLabels(cfg.prov);cfgMessage=null;$('#cfMsg').textContent='';$('#cfMsg').className='fine';
 }
-function cfgRead(){return{prov:($('[name=prov]:checked')||{}).value||'openai',base:$('#cfBase').value.trim(),key:$('#cfKey').value.trim(),model:$('#cfModel').value.trim(),field:$('#cfField').value,proto:$('#cfProto').value,proxy:$('#cfProxy').checked}}
+function cfgRead(){
+ return {
+  prov:$('[name=prov]:checked')?.value||'openai',
+  base:$('#cfBase').value.trim(),key:$('#cfKey').value.trim(),model:$('#cfModel').value.trim(),
+  quality:$('#cfQuality').value.trim(),complexity:$('#cfComplexity').value.trim(),
+  field:$('#cfField').value,proto:$('#cfProto').value,proxy:$('#cfProxy').checked
+ };
+}
 const cloudCfgOpen=()=>{configRevision++;cfgFill();$('#cfg').hidden=false;document.body.style.overflow='hidden';$('#cfgX').focus()};
-const cfgClose=()=>{configRevision++;$('#cfg').hidden=true;document.body.style.overflow=''};
+const cfgClose=()=>{resetModelList();configRevision++;$('#cfg').hidden=true;document.body.style.overflow=''};
 const comfyOpen=()=>{
  $('#comfyManager').hidden=false;document.body.style.overflow='hidden';
  $('#cfComfyBase').value=comfy.base;editComfy(comfy.id?comfy:comfyState.workflows[0]);$('#cfComfyX').focus();
@@ -482,7 +540,7 @@ $('#cfComfyProviders').onclick=()=>{comfyClose();cloudCfgOpen()};
 $('[name=prov][value=comfy]').onclick=()=>{cfgClose();comfyOpen()};
 $$('[name=prov]').forEach(r=>r.onchange=()=>{
  if(r.value=='comfy')return;
- configRevision++;
+ resetModelList();configRevision++;
  const prov=r.value,stored=isComfy()?cfg.cloudProv||'openai':cfg.prov;
  const P=PROV[prov];
  $('#cfBase').value=prov==stored?cfg.base:'';
@@ -568,7 +626,7 @@ $('#cfSave').onclick=()=>{
  if(o.prov=='custom'&&!o.base)return msg('自定义中转需要填写 Base URL',1);
  Object.assign(cfg,o);SV('wbCfg',cfg);render();cfgClose();toast('API 设置已保存在本机');
 };
-$('#cfClr').onclick=()=>{cfg.key='';$('#cfKey').value='';SV('wbCfg',cfg);render();msg('已从本机清除密钥')};
+$('#cfClr').onclick=()=>{resetModelList();cfg.key='';$('#cfKey').value='';SV('wbCfg',cfg);render();msg('已从本机清除密钥')};
 function msg(key,bad,params){
  cfgMessage=typeof key=='function'?key:()=>t(key,params);
  const m=$($('#comfyManager').hidden?'#cfMsg':'#cfComfyMsg');
@@ -618,7 +676,12 @@ function safeErr(raw,j,rid,state=cfg){const cfg=state;const t=String(raw||'')+' 
  let r=String(raw||'').trim();if(cfg.key)r=r.split(cfg.key).join('***');e.raw=r||t.slice(0,600);e.ui=()=>t('被服务商的安全审核拦下了');return e}
 async function apiErr(r,j,state=cfg){const cfg=state;if(j===undefined)j=await r.json().catch(()=>null);const raw=(j&&(j.error&&(j.error.message||j.error.status||j.error)||j.message))||r.statusText||'';{const se=safeErr(typeof raw=='string'?raw:JSON.stringify(raw),j,(j&&j.error&&j.error.request_id)||r.headers.get('x-request-id'),state);if(se){se.status=r.status;return se}}
  const m={400:'请求参数有误：常见原因是模型不支持参考图、画幅尺寸不对或图片格式不支持，可换个模型或画幅再试',401:'密钥无效或已过期，请检查 API Key',403:'没有权限：密钥无此模型权限、账户未验证，或所在地区不受支持',404:'地址或模型不存在：请检查 Base URL 和模型名',413:'图片太大，请换一张更小的照片',429:'请求过于频繁或额度已用完，请稍后再试或检查账户余额',500:'服务商内部错误，请稍后重试',502:'网关错误（中转服务不可用）',503:'服务暂时不可用，请稍后重试',504:'服务商响应超时，请重试'}[r.status]||'请求失败（HTTP {status}）';
- let t=String(typeof raw=='string'?raw:JSON.stringify(raw));if(cfg.key)t=t.split(cfg.key).join('***');const bad=/API_KEY_INVALID|API key not valid|invalid api key|Incorrect API key|AuthenticationError|InvalidApiKey/i.test(t+' '+JSON.stringify(j||''));const e=Error(t);e.status=r.status;e.ui=()=>apiMessage(bad?'密钥无效或已过期，请检查 API Key':m,r.status,t);return e}
+ let t=String(typeof raw=='string'?raw:JSON.stringify(raw));if(cfg.key)t=t.split(cfg.key).join('***');const bad=/API_KEY_INVALID|API key not valid|invalid api key|Incorrect API key|AuthenticationError|InvalidApiKey/i.test(t+' '+JSON.stringify(j||''));const e=Error(t);e.status=r.status;
+ // 提供元が画質や検討量を拒否した場合は、その理由を設定画面から修正できるように残します。
+ if(cfg.prov=='openai' && (cfg.quality || cfg.complexity)){
+  e.imageOptionError=['quality','complexity'].includes(j?.error?.param) || /\b(quality|complexity)\b/i.test(t);
+ }
+ e.ui=()=>apiMessage(bad?'密钥无效或已过期，请检查 API Key':m,r.status,t);return e}
 // プロキシ由来の既知の文言を翻訳し、提供元の任意の応答はそのまま表示します。
 function apiMessage(key,status,detail){
  const header=t(key,{status});
@@ -639,17 +702,24 @@ async function genOnce(imgs,prompt,sig){const ar=$('#wbAR').value,m=modelOf(),P=
   const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j);const c=j&&j.candidates&&j.candidates[0],ps=((j&&j.candidates)||[]).flatMap(c=>(c.content&&c.content.parts)||[]),im=ps.find(p=>(p.inlineData||p.inline_data||{}).data);
   if(!im){const why=(j&&j.promptFeedback&&j.promptFeedback.blockReason)||(c&&c.finishReason);{const rs=(c&&c.safetyRatings||[]).filter(x=>x.blocked||/HIGH|MEDIUM/.test(x.probability||'')).map(x=>x.category).join(' ');const se=why&&/SAFETY|PROHIBITED|BLOCKLIST|SPII|OTHER/i.test(why)?safeErr(why+' '+rs+' '+((c&&c.finishMessage)||''),null,j&&j.responseId):null;if(se)throw se}const t=ps.map(p=>p.text).filter(Boolean).join(' ');const e=Error(t);e.ui=()=>geminiMessage(why,t);throw e}
   const d=im.inlineData||im.inline_data;return{blob:await(await fetch(`data:${d.mimeType||d.mime_type||'image/png'};base64,${d.data}`)).blob()}}
- const json=async(withImgs,extra)=>{const body=Object.assign({model:m,prompt,n:1},extra);if(withImgs&&imgs.length)body.image=await Promise.all(imgs.map(dataURL));
+ // 空欄の項目は送らずモデルの既定値を使います。明示的に選んだ auto は送信します。
+ const imageOptions={};
+ if(cfg.prov=='openai'){
+  if(cfg.quality)imageOptions.quality=cfg.quality;
+  if(cfg.complexity)imageOptions.complexity=cfg.complexity;
+ }
+ const json=async(withImgs,extra)=>{const body=Object.assign({model:m,prompt,n:1},extra,imageOptions);if(withImgs&&imgs.length)body.image=await Promise.all(imgs.map(dataURL));
   const r=await call(`${root()}/images/generations`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body)});const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j);return openaiData(j)};
  if(P=='seedream'){const ex={size:SD[ar]||SD.auto,response_format:'b64_json',watermark:false,sequential_image_generation:'disabled'};try{return{blob:await json(true,ex)}}catch(e){if(!e.safe&&e.status==400&&/image|参考/i.test(e.message)){warn='该模型没有接收参考图，结果只按文字生成，人物与服装可能对不齐。';return{blob:await json(false,ex),warn}}throw e}}
  const sz=AR[ar]||(/^gpt-image/.test(m)?'auto':'1024x1024');
  if(P=='json')return{blob:await json(true,{size:sz})};
  const edits=async field=>{const fd=new FormData();fd.append('model',m);fd.append('prompt',prompt);const one=/^dall-e-2$/.test(m);(one?imgs.slice(0,1):imgs).forEach((b,i)=>fd.append(field,b,`ref-${i+1}.jpg`));fd.append('n','1');fd.append('size',one&&sz=='auto'?'1024x1024':sz);
+  for(const [name,value] of Object.entries(imageOptions))fd.append(name,value);
   const r=await call(`${root()}/images/edits`,{method:'POST',signal:sig,headers:auth(),body:fd});const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j);return openaiData(j)};
  const f0=cfg.prov=='custom'?cfg.field:'image[]';
- try{return{blob:await edits(f0)}}catch(e){if(e.name=='AbortError'||e.safe)throw e;
-  if(e.status==400&&/image/i.test(e.message)&&!/safety|moderation|reject/i.test(e.message)){try{return{blob:await edits(f0=='image[]'?'image':'image[]'),warn:'已自动改用另一种图片字段名重试成功。'}}catch(x){}}
-  if([404,405,415,501].includes(e.status)||/edits|not supported|unsupported|no such|invalid url/i.test(e.message)){try{return{blob:await json(true,{size:sz}),warn:'该接口不支持 images/edits，已自动改用 images/generations（JSON 多图）。'}}catch(x){if(x.name=='AbortError')throw x;return{blob:await json(false,{size:sz}),warn:'该接口不支持参考图，结果只按文字生成，人物与服装可能对不齐。'}}}
+ try{return{blob:await edits(f0)}}catch(e){if(e.name=='AbortError'||e.safe||e.imageOptionError)throw e;
+  if(e.status==400&&/image/i.test(e.message)&&!/safety|moderation|reject/i.test(e.message)){try{return{blob:await edits(f0=='image[]'?'image':'image[]'),warn:'已自动改用另一种图片字段名重试成功。'}}catch(x){if(x.imageOptionError||x.safe||x.name=='AbortError')throw x}}
+  if([404,405,415,501].includes(e.status)||/edits|not supported|unsupported|no such|invalid url/i.test(e.message)){try{return{blob:await json(true,{size:sz}),warn:'该接口不支持 images/edits，已自动改用 images/generations（JSON 多图）。'}}catch(x){if(x.name=='AbortError'||x.safe||x.imageOptionError)throw x;return{blob:await json(false,{size:sz}),warn:'该接口不支持参考图，结果只按文字生成，人物与服装可能对不齐。'}}}
   throw e}}
 // ---------- 进度 ----------
 let T0,tick,PR=0,done=0,total=1,stageKey,stageParams,warnings=[],lastError;
@@ -862,6 +932,8 @@ $('#cfImpF').onchange=async e=>{
    for(const key of ['prov','base','key','model','field','proto','proxy']){
     if(typeof o[key]==typeof cfg[key])cfg[key]=o[key];
    }
+   // 旧形式のバックアップに任意項目がないときはモデル既定の空欄に戻します。
+   for(const key of ['quality','complexity'])cfg[key]=typeof o[key]=='string'?o[key].trim():'';
    comfyClose();cloudCfgOpen();
   }
   SV('wbCfg',cfg);render();msg('已导入设置');
@@ -919,6 +991,7 @@ addEventListener('uilocalechange',()=>{
  if(inited)render(true);
  if(!$('#cfg').hidden){
   cfgLabels($('[name=prov]:checked')?.value||cfg.prov);
+  if(modelStatus)$('#cfModelStatus').textContent=modelStatus();
   if(cfgMessage)$('#cfMsg').textContent=cfgMessage();
  }
  if(!$('#comfyManager').hidden){
