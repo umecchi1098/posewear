@@ -255,17 +255,39 @@ async function localizedMaterials(page) {
   await visible(page, '#grid .card');
   const invalid = await page.evaluate(async () => {
     const errors = [];
-    for (const type of ['pose','depth','portrait','costume','anime']) {
+    const extensions = ['expr','hair','dyn','scene','light','prop','furn'];
+    for (const type of ['pose','depth','portrait','costume','anime',...extensions]) {
       const items = await APP.load(type);
       if (!items.length) errors.push(type);
       for (const it of items) {
         if (![it.titleJa,it.titleEn,it.promptJa,APP.prompt(it,'ja')].every(x => typeof x === 'string' && x.trim() && !x.includes('undefined'))) errors.push(it.k);
-        if (it.angles && (!it.lineJa || it.angles.some(a => !a.ja))) errors.push(it.k);
+        if (it.angles && !extensions.includes(type) && (!it.lineJa || it.angles.some(a => !a.ja))) errors.push(it.k);
+        // 日本語を選んだときに元の英語や素材名だけで済ませていないか、詳細な素材で確認します。
+        if (extensions.includes(type) && (!/[ぁ-んァ-ヶ一-龠]/u.test(it.promptJa) ||
+            it.promptJa === it.en || (/^(expr|scene|light|dyn|prop|furn)$/.test(type) && it.titleJa === it.promptJa))) {
+          errors.push(it.k);
+        }
       }
     }
     return errors.slice(0,10);
   });
   assert.deepEqual(invalid, []);
+
+  // 同じ光の参考画像を開き、画面を英語に替えても日本語で選んだ生成文が保持されることを確認します。
+  await locale(page, 'ja');
+  await gallery(page, 'light');
+  const lighting = await page.evaluate(() => APP.DATA.light.find(it => it.id === 'L001'));
+  const lightingCard = page.locator(`#grid .card[data-k="${lighting.k}"]`);
+  await lightingCard.locator('.phk').click();
+  await page.click('#lb [data-prompt-lang=ja]');
+  const lightingPrompt = await text(page, '#lb .pbox p');
+  assert.ok(lightingPrompt.includes(lighting.promptJa));
+  assert.match(lightingPrompt, /9[,.]?000|９[，、]?０００/);
+  await locale(page, 'en');
+  assert.equal(await text(page, '#lbSide h2'), lighting.titleEn);
+  assert.equal(await text(page, '#lb .pbox p'), lightingPrompt);
+  await page.keyboard.press('Escape');
+  await gallery(page, 'costume');
   const card=page.locator('#grid .card').first();
   const key=await card.getAttribute('data-k');
   const item=await page.evaluate(k => APP.ITEMS[k],key);

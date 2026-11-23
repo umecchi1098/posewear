@@ -1,4 +1,4 @@
-import json,os,shutil,subprocess,depthpack
+import csv,json,os,shutil,subprocess,depthpack
 from costume_text import outfit_text
 import hashlib,re,html as H
 from concurrent.futures import ThreadPoolExecutor
@@ -164,16 +164,27 @@ if os.path.isdir(published):
   if not os.path.isfile(_cdb):
     acs.extend(item for item in json.load(open(f'{published}/anime.json')) if item.get('ext'))
 # CharaDB が CC0 で公開する衣装名・分類を日本語表示に使います（https://charadb-2fi.pages.dev/）。
-# タグを空白で分割すると “sailor collar” のような一つの品名が壊れるため、元のまとまりを保ちます。
 outfit_names = dict((item, (category, name)) for item, category, name in
                     (line.split('|') for line in open('tr_charadb_ja.txt').read().splitlines()))
-for item in acs:
-  if item.get('ext'):
-    category, name = outfit_names[item['id'].removeprefix('charadb-')]
-    item['catJa'] = category
-    item['titleJa'] = name
-    item['titleEn'] = ', '.join(item['kw'].split(', ')[:2]).capitalize()
-    item['promptJa'] = f'{category}の衣装「{name}」。参照画像の配色、素材、シルエットを再現する。'
+charadb_outfits = [item for item in acs if item.get('ext')]
+for item in charadb_outfits:
+  outfit_name = outfit_names.get(item['id'].removeprefix('charadb-'))
+  if outfit_name:
+    item['catJa'], item['titleJa'] = outfit_name
+
+# ID は公開カタログと素材アーカイブに共通です。どちらを使うビルドでも同じ翻訳を加えます。
+# 日本語名が空の行は素材元の原題を使い、本文には形状や光の条件を含む生成用の訳を使います。
+with open('tr_module_text.tsv', encoding='utf-8', newline='') as translations:
+  module_text = {row['id']: row for row in csv.DictReader(translations, delimiter='\t')}
+for collection in (EXP, HAI, DYN, SCE, LIG, PRO, FUR, charadb_outfits):
+  for item in collection:
+    # 外部の素材アーカイブにまだ翻訳されていない項目がある場合、その項目は元の表記で掲載します。
+    row = module_text.get(item['id'])
+    if row is None:
+      continue
+    item['titleEn'] = row['titleEn']
+    item['titleJa'] = row['titleJa'] or item.get('titleJa') or item['ja']
+    item['promptJa'] = row['promptJa']
 if os.path.exists(f'{D}/data.js'): os.remove(f'{D}/data.js')
 if MEDIA_HOST:
   # 同じ作業フォルダーでフルビルドした場合も、古い画像をアプリへ再同梱しません。

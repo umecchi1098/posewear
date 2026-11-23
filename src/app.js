@@ -23,8 +23,6 @@ function savedPromptLanguage(key) {
 const st={tab:'pose',q:'',qAliases:[],f:{},sort:'def',suggestion:'',lang:savedPromptLanguage('lang'),tl:savedPromptLanguage('tl'),fav:new Set(LS('fav')||[]),sel:LS('sel')||[],rec:LS('rec')||[],recT:LS('recT')||{},ang:LS('ang')||{},list:[],n:0,adult:LS('adult')===true};
 const ok=it=>it&&(st.adult||!it.a);
 function load(t){return LOAD[t]||(LOAD[t]=fetch({pose:'poses.json',depth:'depths.json',costume:'costumes.json',anime:'anime.json',portrait:'portraits.json',expr:'expressions.json',hair:'hair.json',dyn:'dynasties.json',scene:'scenes.json',light:'lights.json',prop:'props.json',furn:'furniture.json'}[t]).then(r=>{if(!r.ok)throw Error(r.status);return r.json()}).then(raw=>{const a=Array.isArray(raw)?raw:(raw.items||[]);if(t=='depth')DATA.depthMeta=raw.pack||null;a.forEach((it,i)=>{it.type=t;
- // 上流の表情データは ja に英語の原名を収録しているため、画面と検索用の日本語名を補います。
- if(t==='expr'){it.titleEn=it.ja;it.titleJa=UI.t(it.ti,{},'ja');it.promptJa=it.titleJa}
  it.k=PFX[t]+it.id;it.ord=i;if(it.angles)it.ai=st.ang[it.k]||0;ITEMS[it.k]=it});DATA[t]=a;if(t=='depth')paintDepth();counts();return a}).catch(e=>{delete LOAD[t];throw e}))}
 const needKeys=ks=>Promise.all([...new Set(ks.map(k=>KT[k[0]]).filter(Boolean))].map(load));
 const AH='';const ath=u=>u.startsWith('http')?u:AH+u;
@@ -36,7 +34,11 @@ function prompt(it, lang) {
  const base = lang === 'ja' ? (it.promptJa || it.ja || it.en || it.zh) : it[lang];
  if (!it.angles) return base;
  const angle = it.angles[it.ai];
- if (lang === 'ja') return [base, it.lineJa || UI.t(it.line,{},'ja'), angle.ja || UI.t(angle.zh,{},'ja')].filter(Boolean).join('、');
+ if (lang === 'ja') {
+  const details = [it.lineJa || UI.t(it.line,{},'ja'), angle.ja || UI.t(angle.zh,{},'ja')].filter(Boolean).join('、');
+  // 文章で終わる説明には、分類と撮影方向を次の行に添えます。
+  return details ? base + (base.endsWith('。') ? '\n' : '、') + details : base;
+ }
  if (lang === 'en') return [base, it.lineEn, angle.en].filter(Boolean).join(', ');
  return [base, it.line, angle.zh].filter(Boolean).join('，');
 }
@@ -103,7 +105,7 @@ function apply(){const q=st.q.toLowerCase().trim().split(/\s+/).filter(Boolean);
  let L=base().filter(it=>{
   if(!Object.entries(st.f).every(([k,v])=>!v||val(it,k).includes(v)))return false;
   if(!q.length)return true;
-  const source=it._s||(it._s=[it.id,it.ti,it.titleJa,it.titleEn,it.zh,it.en,it.ja,it.kw,it.cat,it.catEn,it.catJa,it.line,it.lineJa,it.no,it.sec,it.len,it.st,...(it.angles||[]).flatMap(a=>[a.zh,a.en,a.ja])].join(' ').toLowerCase());
+  const source=it._s||(it._s=[it.id,it.ti,it.titleJa,it.titleEn,it.zh,it.en,it.ja,it.promptJa,it.kw,it.cat,it.catEn,it.catJa,it.line,it.lineEn,it.lineJa,it.emo,it.int,it.era,it.no,it.sec,it.len,it.st,...(it.angles||[]).flatMap(a=>[a.zh,a.en,a.ja])].join(' ').toLowerCase());
   return q.every(w=>source.includes(w))||st.qAliases.some(alias=>source.includes(alias));
  });
  if(st.f.ang)L.forEach(it=>{const i=it.angles.findIndex(a=>a.zh==st.f.ang);if(i>=0)it.ai=i});
@@ -189,7 +191,14 @@ function tgSync() {
  });
  return tgPending;
 }
-function tgStat(t,params){const s=$('#tgStat');if(!s)return;s.hidden=!t;if(t)s.textContent=tr(t,params)}
+// 生成状態の原文と枚数を保持し、言語を切り替えても進行表示を訳し直せるようにします。
+let trayStatus;
+function tgStat(key, params) {
+ trayStatus = {key, params};
+ const status = $('#tgStat');
+ status.hidden = !key;
+ status.textContent = key ? tr(key, params) : '';
+}
 function tgRender(){tgUrls.forEach(u=>URL.revokeObjectURL(u));tgUrls=tgRecs.map(r=>URL.createObjectURL(r.after));$('#tgRes').innerHTML=tgUrls.map((u,i)=>`<button data-tg="${i}" title="${txl('查看大图')}"><img src="${u}" alt="${txl('生成结果 {n}',{n:i+1})}"></button>`).join('')}
 $('#tgRes').onclick=e=>{const b=e.target.closest('[data-tg]');if(!b)return;tgCur=+b.dataset.tg;$('#tgViewImg').src=tgUrls[tgCur];$('#tgView').hidden=false};
 const tgClose=()=>{$('#tgView').hidden=true};
@@ -270,7 +279,9 @@ $$('button[data-lang]').forEach(b=>b.onclick=()=>setLang(b.dataset.lang));
 // タブ名と検索欄は、現在の言語とタブの両方から表示を決める。
 function drawHeader(){
  if(st.tab)document.title=tr('{tab} · 衣姿 PoseWear',{tab:tr(TNAME[st.tab])});
- $('#q').placeholder=tr(st.tab=='depth'?'搜姿势名、系列、分类':innerWidth<=760?'搜索':'搜姿势、颜色、单品');
+ // 拡張ライブラリでは、衣装用の色・アイテム欄と区別できる検索例を表示します。
+ const hints={expr:'搜表情、情绪、强度',hair:'搜发型、发色、发饰',dyn:'搜服饰、朝代',scene:'搜场景、地点',light:'搜光线、时段',prop:'搜道具、类别',furn:'搜家具、类别'};
+ $('#q').placeholder=tr(st.tab=='depth'?'搜姿势名、系列、分类':innerWidth<=760?'搜索':hints[st.tab]||'搜姿势、颜色、单品');
 }
 function drawLoadError(t){$('#empty').hidden=false;$('#emptyT').textContent=tr('数据加载失败');$('#emptyP').textContent=tr('请检查网络后刷新页面重试');$('#sugg').innerHTML='';$('#reset').hidden=true;$('#empty .emo').innerHTML=EI.q;$('#emptyGo').innerHTML=`<button class="sm pri" id="retry">${txl('重新加载')}</button>`;$('#retry').onclick=()=>{st.tab='';setTab(t)}}
 // 标签页
@@ -349,11 +360,11 @@ function lbDraw(translateOnly=false){const it=st.list[li];if(!it)return;const im
  const srcLink=D?`<p class="creditln"><b>${txl(it.unofficial||'非官方汉化')}</b> ${txl(it.credit||'')}</p><a class="goext" href="${esc(it.site)}" target="_blank" rel="noopener">${txl('在原站查看')}</a>`:'';
  const previousSimilar=translateOnly&&$('#lbSim');
  $('#lbSide').innerHTML=`<div class="mu">${txl(TNAME[['fav','recent'].includes(st.tab)?st.tab:it.type])} · ${txl('第 {index} / {count} 项',{index:li+1,count:st.list.length})}</div><h2>${esc(title(it))}</h2><div class="mu">${esc(meta)}</div>
- ${jaLine}${depthInfo}${ang?`<div class="angsel" role="group" aria-label="${txl('拍摄角度')}">${it.angles.map((a,i)=>`<button class="chip ${i==it.ai?'on':''}" data-ai="${i}">${txl(a.zh)}</button>`).join('')}</div>`:''}
+ ${jaLine}${depthInfo}${ang?`<div class="angsel" role="group" aria-label="${txl(it.type=='hair'?'发色':'拍摄角度')}">${it.angles.map((a,i)=>`<button class="chip ${i==it.ai?'on':''}" data-ai="${i}">${txl(a.zh)}</button>`).join('')}</div>`:''}
  ${promptBox}${ang?'':it.type=='portrait'?`<div class="jp">${originalName ? originalName+' · ' : ''}${txl('CC0 1.0，AI 生成的虚构人物，请勿用于冒充真人')}</div>`:`<div class="jp">${tr('原始关键词：{words}',{words:`<span lang="en">${esc(it.kw)}</span>`})}</div>`}
  ${srcLink}
  <div class="mact"><button data-x="fav" class="${isF?'on':''}" aria-label="${txl(isF?'取消收藏':'收藏')}">${isF?'♥':'♡'}</button><button data-x="share">${txl('分享')}</button>${D?'':`<button data-x="try" class="pri">${txl(P?'用作姿势参考':it.type=='portrait'?'用作人物参考':it.type=='expr'?'用作表情参考':'试穿这套')}</button>`}</div> <div class="acts"><button data-x="fav">${isF?'♥':'♡'} ${txl(isF?'已收藏':'收藏')}</button><button data-x="sel" class="${isS?'':'pri'}">${isS?'✓':'＋'} ${txl(isS?'已在组合中':'加入组合')}</button>${D?'':`<button data-x="try">${txl(P?'用作姿势参考':it.type=='portrait'?'用作人物参考':it.type=='expr'?'用作表情参考':'试穿这套')}</button>`}<button data-x="share">${txl('分享链接')}</button>${D?'':`<button data-x="dlx">${txl('下载图片')}</button><button data-x="cpimg">${txl('复制图片')}</button>${it.ext?'':`<a href="${esc(orig(it))}" download="posewear-${it.type}-${it.id}${P?'-'+it.ai:''}.png" class="dl"><button tabindex="-1">${txl('下载原图 PNG')}</button></a>`}${P||it.type=='portrait'?'':`<a href="https://s.taobao.com/search?q=${encodeURIComponent([...val(it,'col').slice(0,1),...val(it,'item').slice(0,2)].join(' ')||'女装 '+it.cat)}" target="_blank" rel="noopener" class="dl"><button tabindex="-1">${txl('淘宝搜同款 ↗')}</button></a>`}`}</div>
-<div id="lbSim"></div><p class="mu" style="margin-top:22px;line-height:2.1"><kbd>←</kbd><kbd>→</kbd>${txl('切换')}　${ang?`<kbd>↑</kbd><kbd>↓</kbd>${txl('角度')}　`:''}<kbd>F</kbd>${txl('收藏')}　<kbd>A</kbd>${txl('组合')}　<kbd>C</kbd>${txl('复制')}　<kbd>S</kbd>${txl('分享')}</p>`;if(previousSimilar){$('#lbSim').replaceWith(previousSimilar);const header=previousSimilar.querySelector('.simh');if(header)header.textContent=tr('相似推荐');for(const button of previousSimilar.querySelectorAll('[data-si]')){const name=title(st.list[+button.dataset.si]);button.title=name;button.querySelector('img').alt=name}}else window.X&&X.lb(it)}
+<div id="lbSim"></div><p class="mu" style="margin-top:22px;line-height:2.1"><kbd>←</kbd><kbd>→</kbd>${txl('切换')}　${ang?`<kbd>↑</kbd><kbd>↓</kbd>${txl(it.type=='hair'?'发色':'角度')}　`:''}<kbd>F</kbd>${txl('收藏')}　<kbd>A</kbd>${txl('组合')}　<kbd>C</kbd>${txl('复制')}　<kbd>S</kbd>${txl('分享')}</p>`;if(previousSimilar){$('#lbSim').replaceWith(previousSimilar);const header=previousSimilar.querySelector('.simh');if(header)header.textContent=tr('相似推荐');for(const button of previousSimilar.querySelectorAll('[data-si]')){const name=title(st.list[+button.dataset.si]);button.title=name;button.querySelector('img').alt=name}}else window.X&&X.lb(it)}
 const share=()=>copy(location.href,'分享链接');
 $('#lbSide').onclick=e=>{const it=st.list[li],t=e.target.closest('button');if(!t)return;if(t.dataset.ai){setAng(it,+t.dataset.ai);lbDraw()}if(t.dataset.promptLang){setLang(t.dataset.promptLang);lbDraw(true);$('#lbSide [data-prompt-lang].on').focus()}if(t.dataset.c)copy(prompt(it,t.dataset.c),promptLanguages[t.dataset.c].label);if(t.dataset.x=='fav')toggleFav(it.k);if(t.dataset.x=='sel')toggleSel(it.k);if(t.dataset.x=='share')share();if(t.dataset.x=='try'){lbClose();window.WB&&WB.pick(it)}};
 const step=d=>{li=(li+d+st.list.length)%st.list.length;lbDraw();if(!RM)$('#lbImg').animate([{opacity:.3,transform:`translateX(${d*30}px)`},{opacity:1,transform:'none'}],{duration:320,easing:'cubic-bezier(.16,1,.3,1)'})};
@@ -391,6 +402,12 @@ addEventListener('uilocalechange',()=>{
  drawHeader();drawAgeSwitch();if(!$('#ageBox').hidden)drawAgeDialog();
  if(st.suggestion)$('#q').value=tr(st.suggestion);
  countUp();moveInd();hdr();paintDepth();paintSource(st.tab);tray();
+ if(trayStatus)tgStat(trayStatus.key, trayStatus.params);
+ $('#tgGo').textContent=tr(tgBusy?'生成中…':'生成图片');
+ $('#tgRes').querySelectorAll('[data-tg]').forEach((button,index)=>{
+  button.title=tr('查看大图');
+  button.querySelector('img').alt=tr('生成结果 {n}',{n:index+1});
+ });
  const notice=$('#toast');
  if(notice.classList.contains('on')&&notice._message&&notice.firstChild){
   const {t,params}=notice._message;

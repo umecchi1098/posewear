@@ -7,6 +7,8 @@
   const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const p2 = n => String(n).padStart(2, '0');
   const stamp = d => `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+  // 作業台と同じ言語のポーズ名を使い、旧版で保存した履歴には記録済みの見出しを使います。
+  const resultLabel = record => window.WB?.resultLabel(record) || record.label || '';
   const PROV_NAME = { openai: 'OpenAI', gemini: 'Gemini', seedream: '豆包', custom: '自定义', comfy: 'ComfyUI' };
 
   let L = [];
@@ -160,7 +162,7 @@
       const d = new Date(r.t);
       const timeStr = `${d.getMonth() + 1}/${d.getDate()} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
       const prov = tr(PROV_NAME[r.prov] || r.prov || 'AI');
-      const label = r.label || (r.prompt ? r.prompt.slice(0, 40) : (tr(r.mode == 'gen' ? '自由生图' : '虚拟试穿')));
+      const label = resultLabel(r) || (r.prompt ? r.prompt.slice(0, 40) : (tr(r.mode == 'gen' ? '自由生图' : '虚拟试穿')));
       const sub = `${timeStr} · ${prov} · ${r.model || ''}`;
 
       return `<article class="hist-card${isSel ? ' selected' : ''}" data-t="${r.t}" data-i="${i}">
@@ -283,10 +285,11 @@
     const afterUrl = URL.createObjectURL(r.after);
     lbUrls.push(afterUrl);
 
+    const label = resultLabel(r);
     if (img) {
       img.removeAttribute('srcset');
       img.src = afterUrl;
-      img.alt = r.label || (tr(r.mode == 'gen' ? '自由生图' : '虚拟试穿'));
+      img.alt = label || (tr(r.mode == 'gen' ? '自由生图' : '虚拟试穿'));
     }
 
     let cmpHtml = '';
@@ -312,7 +315,7 @@
     side.innerHTML = `
       <div class="mu">${tr('生成记录 · 第 {index} / {total} 项', {index:curIndex + 1, total:L.length})}</div>
       <h2>${tr(r.mode == 'gen' ? '自由生图' : '虚拟试穿')} · ${esc(prov)}</h2>
-      <div class="mu">${dateStr} · ${tr('模型')} ${esc(r.model || tr('默认'))}${r.label ? ' · ' + esc(r.label) : ''}</div>
+      <div class="mu">${dateStr} · ${tr('模型')} ${esc(r.model || tr('默认'))}${label ? ' · ' + esc(label) : ''}</div>
       ${cmpHtml}
       <div class="pbox" style="margin-top:14px">
         <small>${tr('提示词')}${r.neutral ? tr('（已减少误拦截）') : ''}</small>

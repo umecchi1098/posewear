@@ -76,7 +76,7 @@ function poseDesc(p,lang){
  const it=A.ITEMS[p.k];if(!it)return'';
  const a=it.angles[p.ai??it.ai];
  // 同じポーズでもカードと試着で別の角度を選べるため、試着側に保存した角度を使います。
- if(lang=='ja')return `${it.promptJa||it.ja||it.en}（${it.lineJa||it.line||''}、${a.ja||a.en||a.zh}）${/2人|双人/.test(it.line)?'。2人の人数と位置関係を線画に合わせる':''}`;
+ if(lang=='ja')return `${it.promptJa||it.ja||it.en}（${it.lineJa||UI.t(it.line,{},'ja')}、${a.ja||UI.t(a.zh,{},'ja')}）${/2人|双人/.test(it.line)?'。2人の人数と位置関係を線画に合わせる':''}`;
  return lang=='en'?`${it.en} (${it.lineEn}, ${ANG_EN[a.zh]||a.en||a.zh})${/2人|双人/.test(it.line)?' — a two-person pose: match the number of people and their relative positions':''}`:`${it.zh}（${it.line}，${a.zh}）${/2人|双人/.test(it.line)?'——双人姿势，人数与相对位置需与线稿一致':''}`}
 // 素材ごとの説明はそのまま使い、体の比率だけを人物参照に合わせる指示を加えます。
 const bodyInstructions = {
@@ -111,7 +111,11 @@ function compose(poseSet,lang=W.pl){const en=lang=='en',P=W.persons.length,G=W.g
    const poses=ps.map((p,i)=>(panels?`（${i+1}）`:'')+poseDesc(p,'ja'));
    L.push((panels?`ポーズ：線画ごとに1コマずつ、1枚に${np}コマを並べる。全コマで同じ人物と服装を保ち、余白は均等にして文字は入れない。`:'ポーズ：')+poses.join('、')+'。線画は姿勢・重心・手足の位置・カメラの角度の参考のみに使い、輪郭線、関節の丸、補助線は描かない。');
   }else if(P)L.push('ポーズ：元の写真の姿勢、構図、カメラの角度を保つ。');
-  if(expression)L.push(`表情：${rE}の参考画像（${expression.titleJa||expression.ja||expression.en}）と同じ表情にする。表情のみを反映し、元の人物の顔立ちと輪郭を保つ。`);
+  // 日本語では素材名ではなく、眉・目・口元の動きまで含む素材の説明を使います。
+  if(expression){
+   const description=(expression.promptJa||expression.titleJa||expression.ja||expression.en).replace(/。$/,'');
+   L.push(`表情：${rE}の頭部モデルと同じ表情にする（${description}）。表情だけを写し、人物写真の顔立ちや輪郭、本人らしさを保つ。`);
+  }
   L.push(`仕上げ：${P&&W.keepBg&&!isGen()?'元の背景と照明を保つ。':''}${style[4]}。布の落ち感やしわ、影を自然に描き、細部を鮮明にする。文字、透かし、枠は入れない。`);
   if(ex)L.push('追加指示：'+ex);
  }
@@ -158,7 +162,7 @@ function reprompt(force){
 const displayLabel=(zh,en,ja)=>({en,ja}[UI.locale]||t(zh||''));
 const angleLabel=a=>displayLabel(a.zh,a.en,a.ja);
 function pickRow(a,type,i){const it=a.kind=='lib'&&A.ITEMS[a.k];if(a.kind=='lib'&&!it)return`<div class="empty0">${t('加载中…')}</div>`;
- const src=it?(it.angles?A.ath(it.angles[a.ai??it.ai].t):A.thumb(it)):a.url,name=it?A.title(it):(a.name||t('自定义图片')),sub=it?(it.type=='pose'?displayLabel(it.line,it.lineEn,it.lineJa)+' · '+angleLabel(it.angles[a.ai??it.ai]):displayLabel(it.cat,it.catEn,it.catJa)+' · '+it.id):(type=='costume'?(W.garments.length>1?t(i==0?'上装':'下装'):t('本地上传')):t('本地上传'));
+ const src=it?(it.angles?A.ath(it.angles[a.ai??it.ai].t):A.thumb(it)):a.url,name=it?A.title(it):(a.name||t('自定义图片')),sub=it?(it.type=='pose'?displayLabel(it.line,it.lineEn,it.lineJa)+' · '+angleLabel(it.angles[a.ai??it.ai]):displayLabel(it.cat,it.catEn||it.emoEn,it.catJa)+' · '+it.id):(type=='costume'?(W.garments.length>1?t(i==0?'上装':'下装'):t('本地上传')):t('本地上传'));
  return`<div class="pick ${type}"><img src="${src}" alt="${esc(name)}"><div><b>${esc(name)}</b><small>${esc(sub)}</small></div>${(type=='pose'||type=='expr')&&it?.angles?`<select data-kind="${type}" data-ang="${i}" aria-label="${esc(t('角度'))}">${it.angles.map((x,j)=>`<option value="${j}" ${j==(a.ai??it.ai)?'selected':''}>${esc(angleLabel(x))}</option>`).join('')}</select>`:''}<button class="rmx" data-rm="${type}" data-i="${i}" aria-label="${esc(t('移除'))}" title="${esc(t('移除'))}">×</button></div>`}
 function render(localeOnly=false){
  const local=isComfy(),G=isGen(),poseEnabled=canPickPose();
@@ -474,7 +478,7 @@ function cfgLabels(prov){
  const help={
   openai:()=>t('在 {link} 创建密钥；gpt-image-1 需要已验证的组织。',{link:cfgLink('https://platform.openai.com/api-keys','platform.openai.com/api-keys')}),
   gemini:()=>t('在 {link} 免费获取 API Key（AIza 开头）。',{link:cfgLink('https://aistudio.google.com/apikey','Google AI Studio')}),
-  seedream:()=>t('在 {link} 开通 Seedream 模型并创建 API Key；会自动走本站代理。',{link:cfgLink('https://console.volcengine.com/ark',t('火山方舟控制台'))}),
+  seedream:()=>t('在 {link} 开通 Seedream 模型并创建 API Key。浏览器无法直连时，请开启代理转发。',{link:cfgLink('https://console.volcengine.com/ark',t('火山方舟控制台'))}),
   custom:()=>t('填写中转商提供的 Base URL（通常以 /v1 结尾）与密钥，并按中转文档选择接口协议。')
  };
  $('#cfHelp').innerHTML=help[prov]();
@@ -1335,7 +1339,7 @@ window.WB={async show(){await init();render()},async pick(it){await init();if(it
  W.exprs=[{kind:'lib',k:it.k,ai:it.ai}];toast('已加入表情参考（只取神态）')
  }else{W.garments=[{kind:'lib',k:it.k}];toast('已选为试穿服装')}A.setTab('studio')},_W:W,get _cfg(){return cfg},
  // 履歴ページと作業台が、同じ IndexedDB の記録を読み書きします。
- restoreHistory,db:{tx,save,hist:()=>tx('readonly',s=>s.getAll()),del:key=>tx('readwrite',s=>s.delete(key)),clear:()=>tx('readwrite',s=>s.clear()),put:r=>tx('readwrite',s=>s.put(r)),refreshHist:hist},
+ restoreHistory,resultLabel,db:{tx,save,hist:()=>tx('readonly',s=>s.getAll()),del:key=>tx('readwrite',s=>s.delete(key)),clear:()=>tx('readwrite',s=>s.clear()),put:r=>tx('readwrite',s=>s.put(r)),refreshHist:hist},
  quick:opts=>run({...opts,quick:true}),cfgOpen,nice,busy:()=>!!W.busy,stop:()=>W.busy?.abort(),
  isConfigured:()=>isComfy()?!!comfy.workflow:!!cfg.key,provLabel:()=>[provider(cfg.prov),isComfy()?cfg.name:modelOf()].filter(Boolean).join(' · '),setSel};
 // 言語変更で更新するのは表示だけです。入力、生成、履歴の再読み込みは行いません。
