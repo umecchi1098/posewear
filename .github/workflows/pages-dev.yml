@@ -1,0 +1,131 @@
+name: PoseWear Pages
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# 同一公開先の古い実行が新しい結果を上書きしないよう順番に処理する。
+concurrency:
+  group: posewear-pages-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'umecchi1098/posewear' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      PAGES_APP_PROJECT: ${{ vars.PAGES_APP_PROJECT }}
+      PAGES_ASSET_PROJECT: ${{ vars.PAGES_ASSET_PROJECT }}
+      PAGES_BRANCH: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: 公開先と本番ブランチを照合
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            python3 scripts/pages-config.py --migrate
+          else
+            python3 scripts/pages-config.py
+          fi
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: 公開済みの素材版と今回の素材版を照合
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$PAGES_BRANCH" == main ]]; then
+            MERGED_PR=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[] | select(.merged_at and .base.ref == "main") | .number' | head -1)
+            export MERGED_PR
+          fi
+          python scripts/pages-release.py prepare
+
+      - name: デプロイツールを用意
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pages-cli" --no-fund --no-audit wrangler@4.166.0
+          echo "$RUNNER_TEMP/pages-cli/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: 画像変換の依存を用意
+        if: env.POSEWEAR_BUILD_ASSETS == '1'
+        run: python -m pip install --disable-pip-version-check Pillow==11.3.0
+
+      - uses: ./.github/actions/pages-assets
+        if: env.POSEWEAR_BUILD_ASSETS == '1'
+        with:
+          library: pose
+
+      - uses: ./.github/actions/pages-assets
+        if: env.POSEWEAR_BUILD_ASSETS == '1'
+        with:
+          library: costume
+
+      - uses: ./.github/actions/pages-assets
+        if: env.POSEWEAR_BUILD_ASSETS == '1'
+        with:
+          library: anime
+
+      - uses: ./.github/actions/pages-assets
+        if: env.POSEWEAR_BUILD_ASSETS == '1'
+        with:
+          library: portrait
+
+      - name: アプリとカタログの参照先を検証
+        run: |
+          python scripts/fetch-assets.py --modules-only
+          python build.py
+          python tests/check_csp.py
+          if [[ "$POSEWEAR_BUILD_ASSETS" == 1 ]]; then
+            python scripts/pages-release.py snapshot
+          elif [[ "$POSEWEAR_MEDIA_HOST" == "$POSEWEAR_PRODUCTION_SITE" ]]; then
+            # 初回移行前も2回目からは提供元に問い合わせずに済むよう一覧を保存する。
+            for name in pose/data.json costume/data.json anime/data.json portrait/images.js portrait/ranking.js; do
+              install -D "assets-raw/$name" "dist/release/$name"
+            done
+          fi
+          python scripts/check-pages.py
+
+      - name: 対象ブランチへ公開
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          # PRはレビュー対象のマージ結果、pushは対象ブランチの先頭を照合する。
+          current=$(git ls-remote --exit-code origin "$GITHUB_REF" | cut -f1)
+          if [[ "$current" != "$GITHUB_SHA" ]]; then
+            echo "::error::対象ブランチが更新されています。最新の実行を使用してください。"
+            exit 1
+          fi
+          if [[ "$POSEWEAR_BUILD_ASSETS" == 1 ]]; then
+            mkdir -p "$RUNNER_TEMP/pages-static"
+            wrangler pages deploy "$GITHUB_WORKSPACE/dist-assets" --cwd "$RUNNER_TEMP/pages-static" --project-name "$PAGES_ASSET_PROJECT" --branch "$PAGES_BRANCH" --commit-hash "$GITHUB_SHA"
+          fi
+          wrangler pages deploy dist --project-name "$PAGES_APP_PROJECT" --branch "$PAGES_BRANCH" --commit-hash "$GITHUB_SHA"
+
+      - name: 公開URLでアプリ・素材・APIを確認
+        run: |
+          # エッジの反映を待ってから、内容と画像の配信条件を確認する。
+          for attempt in {1..6}; do
+            if python scripts/check-pages.py --live; then
+              echo "公開確認済み $POSEWEAR_SITE （画像 $POSEWEAR_ASSET_HOST）" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [[ "$attempt" != 6 ]]; then sleep 10; fi
+          done
+          exit 1

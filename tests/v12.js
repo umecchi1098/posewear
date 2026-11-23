@@ -1,7 +1,8 @@
 const {chromium}=require('playwright');const path=require('path'),FX=path.join(__dirname,'fixtures')+'/',SS=path.join(__dirname,'screenshots')+'/';require('fs').mkdirSync(SS,{recursive:true});(async()=>{const U=process.env.U||'http://localhost:8787';const b=await chromium.launch({executablePath:process.env.CHROME_PATH});const errs=[],R=[];const S=SS+'v12-';const T=15000;
 const ok=(n,v)=>{R.push((v?'PASS ':'FAIL ')+n)};
 const W=(pg,f,a)=>pg.waitForFunction(f,a,{timeout:T}).then(()=>true).catch(()=>false);
-const ctx=await b.newContext({viewport:{width:1440,height:900}});const pg=await ctx.newPage();pg.on('pageerror',e=>errs.push(''+e));pg.on('console',m=>m.type()=='error'&&!/404/.test(m.text())&&errs.push(m.text()));
+// 中国語の既存文言を検証できるように、ブラウザーの表示言語を固定する。
+const ctx=await b.newContext({locale:'zh-CN',viewport:{width:1440,height:900}});const pg=await ctx.newPage();pg.on('pageerror',e=>errs.push(''+e));pg.on('console',m=>m.type()=='error'&&!/404/.test(m.text())&&errs.push(m.text()));
 await pg.goto(U+'/');ok('home grid',await W(pg,()=>document.querySelectorAll('#grid .card img.ld').length>=5));ok('intro visible',await pg.isVisible('#intro'));await pg.screenshot({path:S+'d-home.png'});
 // tab switch timing
 const tt=await pg.evaluate(async()=>{const o=[];for(const t of ['costume','portrait','pose']){const t0=performance.now();document.querySelector(`[data-tab=${t}]`).click();await new Promise(r=>{const f=()=>APP.st.tab==t&&document.querySelector('#grid .card')&&!document.querySelector('#grid .skel')?r():requestAnimationFrame(f);f()});o.push(Math.round(performance.now()-t0))}return o});ok('tab switch ms '+tt,Math.max(...tt)<400);
@@ -27,7 +28,7 @@ await pg.click('[data-tab=studio]');await W(pg,()=>APP.st.tab=='studio');await p
 await pg.evaluate(()=>{document.documentElement.dataset.theme='dark'});await pg.goto(U+'/#costume');await W(pg,()=>APP.st.tab=='costume'&&document.querySelectorAll('#grid .card .phk').length>3);await pg.evaluate(()=>document.querySelectorAll('#grid .card .phk')[2].click());await pg.waitForTimeout(900);await pg.screenshot({path:S+'d-dark-lb.png'});await pg.keyboard.press('Escape');
 await pg.evaluate(()=>{localStorage.theme='light'});
 // mobile
-const m=await (await b.newContext({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true})).newPage();m.on('pageerror',e=>errs.push('m '+e));
+const m=await (await b.newContext({locale:'zh-CN',viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true})).newPage();m.on('pageerror',e=>errs.push('m '+e));
 await m.goto(U+'/');await W(m,()=>document.querySelectorAll('#grid .card img.ld').length>=2);await m.waitForTimeout(400);await m.screenshot({path:S+'m-home.png'});
 let small=await m.evaluate(()=>[...document.querySelectorAll('.tabs button,.cbtns button,#adultSw,#theme')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.height<34}).map(e=>e.id||e.className||e.textContent));console.log(small);small=small.length;ok('mobile small targets '+small,small==0);
 await m.evaluate(()=>document.querySelector('#grid .card .phk').click());await W(m,()=>!document.querySelector('#lb').hidden);await m.waitForTimeout(900);ok('mobile sticky actions',await m.isVisible('.mact'));await m.screenshot({path:S+'m-lb.png'});

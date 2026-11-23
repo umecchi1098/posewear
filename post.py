@@ -1,6 +1,12 @@
 # v10 构建后处理：哈希资源、静态详情页、SEO 文件、_headers（由 build.py exec）
 SITE=os.environ.get('POSEWEAR_SITE','https://posewear.pages.dev').rstrip('/')  # 部署到自己的域名时改这里
 AH=os.environ.get('POSEWEAR_ASSET_HOST','').rstrip('/')  # 分离部署时缩略图/原图所在站（见 build.py 的 AHOST）
+# 画像を別サイトに置くときは絶対URL、ローカル配布では同じサイトのパスを維持します。
+from urllib.parse import urljoin
+def media_url(path, *, absolute=False):
+  return urljoin(SITE + '/' if absolute else '/', path)
+
+WAT=os.environ.get('POSEWEAR_WA_TOKEN','').strip()  # Cloudflare Web Analytics 站点令牌（公开值，随页面下发）；设了才注入统计脚本并放行其 CSP 域名
 def TU(p): return p if p.startswith('http') else (AH+'/'+p if AH else '/'+p)  # 缩略图相对引用
 def TS(p): return p if p.startswith('http') else (AH+'/'+p if AH else SITE+'/'+p)  # 缩略图绝对引用（JSON-LD）
 h8=lambda b:hashlib.sha256(b if isinstance(b,bytes) else b.encode()).hexdigest()[:10]
@@ -11,21 +17,41 @@ def put(name,data):
   b=data.encode() if isinstance(data,str) else data
   base,ext=name.rsplit('.',1);n=f'assets/{base}.{h8(b)}.{ext}';open(f'{D}/{n}','wb').write(b);A[name]=n;return n
 put('poses.json',PJ);put('costumes.json',CJ);put('anime.json',AJ);put('portraits.json',RJ);put('depths.json',DJ)
-for f in ['style.css','zip.js','extras.js','studio.js']: put(f,open(f'src/{f}','rb').read())
+# 翻訳辞書もキャッシュの版に含め、更新後に古い辞書が残らないようにします。
+ui_files=['ui.js','messages-common.js','messages-gallery.js','messages-studio.js']
+static_files=['style.css',*ui_files,'zip.js','extras.js','comfy.js','comfy-workflows.js','generation-settings.js','studio.js','history.js']
+for f in static_files: put(f,open(f'src/{f}','rb').read())
+# フォントの内容が変わると CSS とキャッシュの URL も変わる。ライセンスも同じサイトで配信する。
+font_name='noto-sans-jp.woff2'
+font_path=put(font_name,open(f'fonts/{font_name}','rb').read())
+put('fonts.css',open('src/fonts.css').read().replace(f'../fonts/{font_name}',f'/{font_path}'))
+static_files.append('fonts.css')
+shutil.copyfile('fonts/OFL.txt',f'{D}/NotoSansJP-OFL.txt')
+# Windowsのブラウザーから、設定画面と同じホストにある試着用の見本を取得できます。
+os.makedirs(f'{D}/workflows',exist_ok=True)
+for workflow in ['try-on-qwen-2509-api.json', 'posewear-qwen21-pose-api.json', 'posewear-qwen21-pose-no-pe-api.json']:
+  shutil.copyfile(f'workflows/{workflow}',f'{D}/workflows/{workflow}')
+shutil.copyfile('docs/comfyui-windows.md',f'{D}/comfyui-windows.md')
+put('expressions.json',EXJ);put('hair.json',HAJ);put('dynasties.json',DYJ);put('scenes.json',SCJ);put('lights.json',LIJ);put('props.json',PRJ);put('furniture.json',FUJ)
 app=open('src/app.js').read()
 if AH: app=app.replace("const AH='';",f"const AH='{AH}/';")
-app=app.replace("'poses.json'","'/"+A['poses.json']+"'").replace("'costumes.json'","'/"+A['costumes.json']+"'").replace("'anime.json'","'/"+A['anime.json']+"'").replace("'portraits.json'","'/"+A['portraits.json']+"'").replace("'depths.json'","'/"+A['depths.json']+"'")
+# データ名だけを置き換え、アプリが今回生成したハッシュ付きファイルを読み込みます。
+for name, path in A.items():
+  if name.endswith('.json'):
+    app = app.replace("'" + name + "'", "'/" + path + "'")
 put('app.js',app)
 VER='posewear-v10-'+h8(''.join(A.values()))
-idx=open('src/index.html').read()
-for f in ['style.css','app.js','zip.js','extras.js','studio.js']:
+# 共有プレビューや検索結果にも、今回公開するフォーク自身のURLを使います。
+idx=open('src/index.html').read().replace('__POSEWEAR_SITE__', H.escape(SITE, quote=True))
+for f in [*static_files,'app.js']:
   idx=idx.replace(f'"{f}"',f'"/{A[f]}"')
 idx=idx.replace('href="poses.json"',f'href="/{A["poses.json"]}"')
+if WAT: idx=idx.replace('</body>',f'<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon=\'{{"token": "{WAT}"}}\'></script></body>')
 open(f'{D}/index.html','w').write(idx)
-for f in ['style.css','app.js','zip.js','extras.js','studio.js']:
+for f in [*static_files,'app.js']:
   if os.path.exists(f'{D}/{f}'): os.remove(f'{D}/{f}')
 sw=open('src/sw.js').read().replace("const V='posewear-v9'",f"const V='{VER}'")
-sw=sw.replace("['./','index.html','style.css','app.js','studio.js','extras.js','zip.js','favicon.svg']",json.dumps(['/','/favicon.svg']+['/'+A[f] for f in ['style.css','app.js','studio.js','extras.js','zip.js','poses.json','depths.json']]))
+sw=sw.replace('/* BUILD_PRECACHE */ []',json.dumps(['/','/favicon.svg']+['/'+A[f] for f in [*static_files,font_name,'app.js','poses.json','depths.json']]))
 open(f'{D}/sw.js','w').write(sw)
 import base64
 inl=re.findall(r'<script>(.*?)</script>',idx,re.S)
@@ -62,16 +88,16 @@ def page(kind,it,rel):
     ttl=f"{it['ti']} · {it['cat']}穿搭参考";img=it['m'];w,h=1080,1620;th=it['t']
     desc=it['zh'];meta=f"{it['cat']} · 编号 {it['id']}";en=it['en']
   url=f"{SITE}/{kind}/{it['id']}/"
-  ld={"@context":"https://schema.org","@type":"ImageObject","name":ttl,"description":desc,"contentUrl":f"{SITE}/{img}","thumbnailUrl":f"{TS(th)}","url":url,"width":w,"height":h,"isPartOf":{"@type":"WebSite","name":"衣姿 PoseWear","url":SITE+'/'},"creditText":"AI Pose Gallery / AI Costume Gallery (@giaaibusi)"}
+  ld={"@context":"https://schema.org","@type":"ImageObject","name":ttl,"description":desc,"contentUrl":media_url(img, absolute=True),"thumbnailUrl":f"{TS(th)}","url":url,"width":w,"height":h,"isPartOf":{"@type":"WebSite","name":"衣姿 PoseWear","url":SITE+'/'},"creditText":"AI Pose Gallery / AI Costume Gallery (@giaaibusi)"}
   rl=''.join(f'<li><a href="/{kind}/{r["id"]}/"><img src="{TU(r["angles"][0]["t"] if P else r["t"])}" alt="{E(r["zh"] if P else r["ti"])}" width="{300 if P else 360 if kind=="costume" else 400}" height="{400 if P else 540 if kind=="costume" else 500}" loading="lazy">{E(r["zh"] if P else r["ti"])}</a></li>' for r in rel)
   lab={'pose':'姿势库','costume':'服装库','portrait':'人像库'}[kind]
   return f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{E(ttl)} | 衣姿 PoseWear</title><meta name="description" content="{E(desc[:150])}"><link rel="canonical" href="{url}">
-<meta property="og:type" content="article"><meta property="og:title" content="{E(ttl)}"><meta property="og:description" content="{E(desc[:150])}"><meta property="og:image" content="{SITE}/{img}"><meta property="og:url" content="{url}"><meta name="twitter:card" content="summary_large_image">
+<meta property="og:type" content="article"><meta property="og:title" content="{E(ttl)}"><meta property="og:description" content="{E(desc[:150])}"><meta property="og:image" content="{media_url(img, absolute=True)}"><meta property="og:url" content="{url}"><meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>{CSS}</style>
 <script type="application/ld+json">{json.dumps(ld,ensure_ascii=False)}</script></head><body>
 <header><a href="/">{LOGO}衣姿 PoseWear</a></header>
-<main><div class="im"><img src="/{img}" alt="{E(ttl)}" width="{w}" height="{h}"></div>
+<main><div class="im"><img src="{media_url(img)}" alt="{E(ttl)}" width="{w}" height="{h}"></div>
 <div><div class="bc"><a href="/">首页</a> › <a href="/#{kind}">{lab}</a> › {E(it.get('cat') or it.get('len'))}</div><h1>{E(it['zh'] if P else it['ti'])}</h1><div class="mu">{E(meta)}</div>
 <div class="box"><small>中文描述</small><p>{E(desc)}</p></div><div class="box"><small>英文提示词 · PROMPT</small><p>{E(en)}</p></div>
 <a class="go" href="/#{kind}/{it['id']}">在衣姿中打开</a><a class="go" style="background:#111" href="/#studio">去试穿</a></div>
@@ -80,11 +106,16 @@ def page(kind,it,rel):
 open(f'{D}/404.html','w').write(f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>页面不存在 | 衣姿 PoseWear</title><meta name="robots" content="noindex"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>{CSS}
 .nf{{max-width:480px;margin:12vh auto;text-align:center;padding:0 20px}}.nf b{{font-size:64px;color:#d81b3a;display:block;line-height:1}}</style></head><body><header><a href="/">{LOGO}衣姿 PoseWear</a></header>
 <div class="nf"><b>404</b><h1>这个页面不存在</h1><p class="mu">链接可能写错了，或者内容已经调整。</p><a class="go" href="/">回到首页</a><a class="go" style="background:#111" href="/#costume">看看服装库</a></div></body></html>''')
-_IMG=" ".join(["'self'","data:","blob:"]+list(DEPTH_ORIGINS)+([AH] if AH else []))
-CSP=("default-src 'self'; script-src 'self' "+SH+"; style-src 'self' 'unsafe-inline'; img-src "+_IMG+"; font-src 'self' data:; "
- "connect-src 'self' data: blob: https://api.openai.com https://generativelanguage.googleapis.com https://*.volces.com https://*.bytepluses.com https://oaidalleapiprodscus.blob.core.windows.net https://*.googleusercontent.com; "
+# 表示用の img と、試着で画像を読む fetch に同じ素材ホストを許可します。
+image_hosts = sorted(set(DEPTH_ORIGINS) | set(HOTLINK_ORIGINS) | {host for host in (AH, MEDIA_HOST) if host})
+_IMG = " ".join(["'self'", "data:", "blob:", *image_hosts])
+CSP=("default-src 'self'; script-src 'self' "+SH+(" https://static.cloudflareinsights.com" if WAT else "")+"; style-src 'self' 'unsafe-inline'; img-src "+_IMG+"; font-src 'self' data:; "
+ "connect-src 'self' data: blob: https://api.openai.com https://generativelanguage.googleapis.com https://*.volces.com https://*.bytepluses.com https://oaidalleapiprodscus.blob.core.windows.net https://*.googleusercontent.com"+(" "+" ".join(image_hosts))+(" https://cloudflareinsights.com" if WAT else "")+"; "
  "worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests")
 IMM='  Cache-Control: public, max-age=31536000, immutable\n'
+# Pages Functions 必须位于部署目录内才会随 wrangler pages deploy 一起发布（曾因只传静态产物导致 /api/proxy 丢失，见 issue #7）
+if os.path.isdir('functions'):
+  shutil.rmtree(f'{D}/functions',ignore_errors=True); shutil.copytree('functions',f'{D}/functions')
 open(f'{D}/_headers','w').write(f'''/*
   Content-Security-Policy: {CSP}
   X-Content-Type-Options: nosniff
@@ -98,6 +129,12 @@ open(f'{D}/_headers','w').write(f'''/*
 {IMM}/c/*
 {IMM}/a/*
 {IMM}/r/*
+{IMM}/e/*
+{IMM}/y/*
+{IMM}/s/*
+{IMM}/l/*
+{IMM}/t/*
+{IMM}/f/*
 {IMM}/o/*
 {IMM}/icon-*
   Cache-Control: public, max-age=86400
@@ -118,4 +155,17 @@ open(f'{D}/_headers','w').write(f'''/*
 /portrait/*
   Cache-Control: public, max-age=600
 ''')
+# 別のアプリ公開先からも、拡大画像を試着やコピー用に読み込めるようにします。
+with open(f'{D}/_headers', 'a') as headers:
+  for group in ('p', 'c', 'a', 'r'):
+    for size in ('i', 'm'):
+      headers.write(f'/{group}/{size}/*\n  Access-Control-Allow-Origin: *\n')
+# 従来の詳細画像リンクや保存済みURLも、移設した公開先で引き続き開けます。
+redirect_path = os.path.join(D, '_redirects')
+if MEDIA_HOST:
+  with open(redirect_path, 'w') as redirects:
+    for prefix in ('p/i', 'c/i', 'c/m', 'a/i', 'a/m', 'r/m'):
+      redirects.write(f'/{prefix}/* {MEDIA_HOST}/{prefix}/:splat 302\n')
+elif os.path.exists(redirect_path):
+  os.remove(redirect_path)
 exec(open('seo.py').read())

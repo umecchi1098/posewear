@@ -162,6 +162,8 @@ def catalog(root=ROOT):
                 zh, en = tr[name]
                 lz, le = LINE[line]
                 g = {'id': gid, 'no': str(no), 'line': lz, 'lineEn': le, 'lineJa': line, 'cat': CAT[cat], 'catJa': cat, 'ja': name, 'zh': zh, 'en': en, 'pack': pid, 'site': site, 'credit': manifest.get('credit') or '', 'unofficial': manifest.get('unofficial') or '非官方汉化', 'angles': []}
+                # 日本語名は配布元の表記を使う。向きは選択中の角度で変わるので本文には含めない。
+                g.update(titleJa=name, titleEn=en[:1].upper()+en[1:], promptJa=name)
                 if source == 'hotlink':
                     g['ext'] = 1
                     g['ref'] = ref or 'no-referrer'

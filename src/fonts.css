@@ -1,0 +1,24 @@
+/* Noto Sans JP の利用条件は /NotoSansJP-OFL.txt に掲載している。 */
+/* 日本語は同じサイトに置いた可変フォントを使う。取得中も端末の日本語書体で操作できる。 */
+@font-face {
+  font-family: "Noto Sans JP";
+  src: url("../fonts/noto-sans-jp.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* 本文に lang が付いていれば、画面全体と違う言語でも本文の字形を優先する。 */
+:root,
+[lang|="en"] {
+  --sans: system-ui, "Helvetica Neue", Arial, sans-serif;
+}
+[lang|="zh"] {
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "HarmonyOS Sans SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+}
+[lang|="ja"] {
+  --sans: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+}
+[lang] {
+  font-family: var(--sans);
+}
