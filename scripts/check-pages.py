@@ -74,6 +74,11 @@ def main():
         if not items:
             raise SystemExit(f'{catalog}: カタログに素材がありません')
         for index, item in enumerate(items):
+            # CharaDB の画像は提供元の規約に従い、3サイズとも元サイトへ直接リンクします。
+            if name == 'anime' and item.get('ext'):
+                if item['o'] or not all(item[key].startswith('https://charadb-2fi.pages.dev/') for key in ('t', 'm', 'i')):
+                    raise SystemExit(f'{catalog.name}: CharaDB の配信先を確認してください: {item["id"]}')
+                continue
             for angle, row in enumerate(item.get('angles', [item])):
                 for key in ('t', 'o', 'i', 'm'):
                     if key == 'm' and name == 'poses':

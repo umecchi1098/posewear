@@ -6,7 +6,7 @@
   "scripts": {
     "build": "python3 build.py",
     "serve": "python3 -m http.server 8787 -d dist",
-    "test": "node tests/generation-settings-store.js && node tests/v12.js && node tests/v13.js && node tests/ui-locales.js && node tests/comfy-local.js && node tests/openai-settings.js && node tests/history.js && node tests/history-gallery.js && node tests/generation-settings.js",
+    "test": "node tests/generation-settings-store.js && node tests/v12.js && node tests/v13.js && node tests/v14-xai.js && node tests/v15-modules.js && node tests/v16-proxy.mjs && node tests/v17-history.js && node tests/v18-quick.js && node tests/ui-locales.js && node tests/comfy-local.js && node tests/openai-settings.js && node tests/history.js && node tests/history-gallery.js && node tests/generation-settings.js",
     "deploy": "wrangler pages deploy dist --project-name posewear"
   },
   "devDependencies": {

@@ -10,7 +10,7 @@
   python3 scripts/fetch-assets.py --meta-only  # 只下载数据，不下载图片
   python3 scripts/fetch-assets.py --images-only  # 使用已保存的数据，只补齐图片
 """
-import argparse, json, os, re, time, urllib.parse, urllib.request, concurrent.futures as cf
+import argparse, hashlib, json, os, re, time, urllib.parse, urllib.request, concurrent.futures as cf
 from pathlib import Path
 
 SRC = {
@@ -22,6 +22,28 @@ SRC = {
 OUT = os.environ.get('POSEWEAR_RAW', 'assets-raw')
 UA = {'User-Agent': 'Mozilla/5.0 (PoseWear local build)'}
 WORKERS = 4
+# v1.2.0 の公開カタログをハッシュで固定します。画像は取得せず、ビルド時に元の配信先を参照します。
+MODULE_CATALOGS = {
+    'expressions': '2d7bb3c343', 'hair': 'ed804ff71c', 'dynasties': '3b06c6a695',
+    'scenes': '7150754a14', 'lights': 'efac67b822', 'props': 'd7e82c46c9',
+    'furniture': '36317c37f0', 'anime': '2770014860',
+}
+
+
+def fetch_modules():
+    directory = Path(OUT) / 'published-modules'
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, digest in MODULE_CATALOGS.items():
+        catalog = directory / (name + '.json')
+        if catalog.exists() and hashlib.sha256(catalog.read_bytes()).hexdigest().startswith(digest):
+            continue
+        url = f'https://posewear.pages.dev/assets/{name}.{digest}.json'
+        data = get(url)
+        if not hashlib.sha256(data).hexdigest().startswith(digest):
+            raise ValueError(f'{name}: 上流 v1.2.0 のカタログと一致しません: {url}')
+        catalog.write_bytes(data)
+    print('追加ライブラリの公開カタログを確認しました。', flush=True)
+
 
 
 def image_header(data):
@@ -136,7 +158,12 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--meta-only', action='store_true', help='カタログだけを取得する')
     mode.add_argument('--images-only', action='store_true', help='保存済みのカタログに従って不足画像を取得する')
+    mode.add_argument('--modules-only', action='store_true', help='上流 v1.2.0 の追加ライブラリのカタログを取得する')
     args = parser.parse_args()
+    if args.modules_only or (not args.libraries and not args.images_only):
+        fetch_modules()
+    if args.modules_only:
+        return
     for lib in args.libraries or SRC:
         if lib not in SRC:
             parser.error(f'Unknown library: {lib}')

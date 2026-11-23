@@ -71,6 +71,13 @@ for c in cos: SRC[c['id']]=c.pop('_src')
 for c in acs: SRC['anime:'+c['id']]=c.pop('_src')
 # 安全内容排在前面（默认落地页无露骨内容）
 PL=sorted(poses.values(),key=lambda p:p.get('a',0))
+# CharaDB 服装 440 条并入动画服装（元数据自存、图片热链原站，见 scripts/prep-modules.py）
+_cdb=f'{R}/charadb/outfits.json'
+if os.path.exists(_cdb):
+  for d in json.load(open(_cdb)):
+    it={'id':d['id'],'cat':d['cat'],'catEn':d['catEn'],'kw':d['kw'],'zh':d['name']+'，'+'、'.join(d['tagsZh'][1:])+'。','en':d['kw'],'ti':d['name'],'t':d['t'],'m':d['m'],'i':d['i'],'o':'','ext':1}
+    if d.get('sens'): it['a']=1
+    acs.append(it)
 
 # ---------- 人像库（AI Portrait Gallery，CC0，@agi_aibusi）----------
 rt=open(f'{R}/portrait/images.js').read();rd=json.loads(rt[rt.index('['):rt.rindex(']')+1])
@@ -107,13 +114,70 @@ if MEDIA_HOST:
     for angle in pose['angles']:
       angle['i'] = MEDIA_HOST + '/' + angle['i']
   for item in cos + acs + pors:
+    if item.get('ext'): continue  # CharaDB の画像は提供元の絶対 URL を維持します。
     for size in ('i', 'm'):
       item[size] = MEDIA_HOST + '/' + item[size]
-PJ=J(PL);CJ=J(cos);AJ=J(acs);RJ=J(pors)
+
+# ---------- 新模块（数据由 scripts/prep-modules.py 从本地档案生成到 assets-raw，构建不访问外网）----------
+VM={'front':('正面','front view'),'diag':('斜侧','three-quarter view'),'side':('侧面','side view'),'back':('背面','back view'),'above':('俯视','high angle, from above'),'below':('仰视','low angle, from below'),'eye':('平视','eye-level view'),'tq':('3/4 侧','three-quarter view')}
+def _vmod(sub,pre):
+  p=f'{R}/{sub}/data.json'
+  if not os.path.exists(p): return []
+  out=[]
+  for it in json.load(open(p)):
+    nit={'id':it['id'],'cat':it['cat'],'ti':it['ti'],'zh':it['zh'],'en':it['en'],'ja':it.get('ja',''),'line':it['line'],'lineEn':it['lineEn'],'no':it['id'],
+         'angles':[{'zh':VM[v][0],'en':VM[v][1],'t':f'{pre}/t/{it["id"]}_{v}.webp','i':f'{pre}/i/{it["id"]}_{v}.webp','o':f'o/{pre}/{it["id"]}_{v}.webp','_3':f,'_9':f} for v,f in it['views'].items()]}
+    nit.update(it.get('extra') or {})
+    out.append(nit)
+  return out
+EXP=_vmod('expression','e'); DYN=_vmod('dynasty','y'); SCE=_vmod('scene','s'); LIG=_vmod('light','l'); PRO=_vmod('prop','t'); FUR=_vmod('furn','f')
+_hp=f'{R}/charadb/hair.json'; HAI=json.load(open(_hp)) if os.path.exists(_hp) else []
+# 热链图片的源站（CharaDB 等）：post.py 据此放行 CSP 的 img-src/connect-src，
+# 否则浏览器会拦截全部热链图片（2026-11-23 发型库全图加载失败的根因）。
+def _origins(o):
+  s=set()
+  def w(x):
+    if isinstance(x,dict):
+      for v in x.values(): w(v)
+    elif isinstance(x,list):
+      for v in x: w(v)
+    elif isinstance(x,str) and x.startswith('https://'): s.add('/'.join(x.split('/')[:3]))
+  w(o); return s
+# 元リポジトリが配信する追加ライブラリを利用するときは、取得済みのカタログを読みます。
+# ローカルのアーカイブを用意したライブラリは、そちらの画像とカタログを優先します。
+published = os.path.join(R, 'published-modules')
+PUBLIC_SITE = 'https://posewear.pages.dev'
+PUBLIC_IMAGES = 'https://pwimg.0vo.pro'
+modules = [('expression','expressions',EXP), ('dynasty','dynasties',DYN), ('scene','scenes',SCE),
+           ('light','lights',LIG), ('prop','props',PRO), ('furn','furniture',FUR)]
+if os.path.isdir(published):
+  for sub, name, items in modules:
+    if not os.path.isfile(f'{R}/{sub}/data.json'):
+      items.extend(json.load(open(f'{published}/{name}.json')))
+      for item in items:
+        for angle in item['angles']:
+          # 上流は縮小・原寸画像を R2、表示用画像をアプリのドメインから配信します。
+          for key, host in [('t', PUBLIC_IMAGES), ('o', PUBLIC_IMAGES), ('i', PUBLIC_SITE)]:
+            angle[key] = host + '/' + angle[key]
+  if not os.path.isfile(_hp):
+    HAI = json.load(open(f'{published}/hair.json'))
+  if not os.path.isfile(_cdb):
+    acs.extend(item for item in json.load(open(f'{published}/anime.json')) if item.get('ext'))
+# CharaDB が CC0 で公開する衣装名・分類を日本語表示に使います（https://charadb-2fi.pages.dev/）。
+# タグを空白で分割すると “sailor collar” のような一つの品名が壊れるため、元のまとまりを保ちます。
+outfit_names = dict((item, (category, name)) for item, category, name in
+                    (line.split('|') for line in open('tr_charadb_ja.txt').read().splitlines()))
+for item in acs:
+  if item.get('ext'):
+    category, name = outfit_names[item['id'].removeprefix('charadb-')]
+    item['catJa'] = category
+    item['titleJa'] = name
+    item['titleEn'] = ', '.join(item['kw'].split(', ')[:2]).capitalize()
+    item['promptJa'] = f'{category}の衣装「{name}」。参照画像の配色、素材、シルエットを再現する。'
 if os.path.exists(f'{D}/data.js'): os.remove(f'{D}/data.js')
 if MEDIA_HOST:
   # 同じ作業フォルダーでフルビルドした場合も、古い画像をアプリへ再同梱しません。
-  for folder in ('p', 'c', 'a', 'r', 'o'):
+  for folder in ('p', 'c', 'a', 'r', 'o', 'e', 'y', 's', 'l', 't', 'f'):
     shutil.rmtree(os.path.join(D, folder), ignore_errors=True)
 if BUILD_ASSETS or not MEDIA_HOST:
   # Pillow は素材を実際に変換するビルドでのみ必要です。
@@ -159,7 +223,7 @@ if BUILD_ASSETS or not MEDIA_HOST:
   if AHOST:
     # 分离模式下缩略图/原图改写到 dist-assets，删掉 dist 里上一轮单站构建残留的旧文件，
     # 否则主站仍含这批文件、文件数压不回 2 万上限（Codex review on PR #4）
-    for _d in ['p/t','c/t','a/t','r/t','o']:
+    for _d in ['p/t','c/t','a/t','r/t','e/t','y/t','s/t','l/t','t/t','f/t','o']:
       shutil.rmtree(f'{D}/{_d}',ignore_errors=True)
   if os.path.exists(f'{AROOT}/p/t'):
     for f in os.listdir(f'{AROOT}/p/t'):
@@ -173,9 +237,34 @@ if BUILD_ASSETS or not MEDIA_HOST:
   with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as images:
     for convert, rows in [(cv,pd), (cm,cd), (ca,ad), (cr,rd)]:
       list(images.map(convert, rows))
+# ローカル素材は必要なビルドだけでコピーし、公開カタログには作業用ファイル名を含めません。
+for sub, name, items in modules:
+  for item in items:
+    for angle in item['angles']:
+      thumb = angle.pop('_3', None)
+      display = angle.pop('_9', None)
+      if angle['i'].startswith('https://'):
+        continue
+      if BUILD_ASSETS or not MEDIA_HOST:
+        for filename, tier, root, key in [(thumb,'w300',AROOT,'t'), (display,'w900',MEDIA_ROOT,'i'), (display,'w900',AROOT,'o')]:
+          dest = os.path.join(root, angle[key])
+          os.makedirs(os.path.dirname(dest), exist_ok=True)
+          if not os.path.exists(dest):
+            shutil.copyfile(f'{R}/{sub}/files/{tier}/{filename}', dest)
+      if MEDIA_HOST:
+        angle['i'] = MEDIA_HOST + '/' + angle['i']
+HOTLINK_ORIGINS = sorted(_origins([HAI, [item for item in acs if item.get('ext')], [items for _, _, items in modules]]))
+PJ=J(PL);CJ=J(cos);AJ=J(acs);RJ=J(pors)
+EXJ=J(EXP);DYJ=J(DYN);SCJ=J(SCE);LIJ=J(LIG);PRJ=J(PRO);FUJ=J(FUR);HAJ=J(HAI)
 # 深度姿势：只解析素材包里的文本，热链包不复制图片（见 depthpack.py）
 _dc=depthpack.catalog(); DJ=J(_dc['payload']); DEPTH_ORIGINS=_dc['origins']
+if AHOST:
+  # フォークの素材サイトには深度画像がないため、実際に d/ を配信する上流の R2 を利用します。
+  DEPTH_ORIGINS = sorted(set(DEPTH_ORIGINS) | {PUBLIC_IMAGES})
+  # 图片自存模式：深度图已全量存入图片域名下的 d/ 前缀（上游 /thumbs/→/d/thumbs/、/img/→/d/img/），
+  # 条目地址改走自存，不再热链原站（原站不可用时前端会整批找不到图）；署名用的裸域名链接不在替换范围内。
+  DJ=DJ.replace('https://ai-pose-depth-gallery.pages.dev/thumbs/',PUBLIC_IMAGES+'/d/thumbs/').replace('https://ai-pose-depth-gallery.pages.dev/img/',PUBLIC_IMAGES+'/d/img/')
 for src,rel in _dc['copies']:
   dest=f'{D}/{rel}'; os.makedirs(os.path.dirname(dest),exist_ok=True); shutil.copyfile(src,dest)
 exec(open('post.py').read())
-print(len(poses),len(cos),len(acs),len(_dc['payload']['items']))
+print(len(poses),len(cos),len(acs),len(_dc['payload']['items']),'| new:',len(EXP),len(HAI),len(DYN),len(SCE),len(LIG),len(PRO),len(FUR))

@@ -11,7 +11,7 @@ async function main() {
     const fixtures = path.join(__dirname, 'fixtures');
     const image = await fs.readFile(path.join(fixtures, 'mk1.png'), 'base64');
     const previous = {
-      prov: 'openai', base: 'https://personal.example/v1', key: 'personal-test-key',
+      prov: 'openai', proxy: true, base: 'https://personal.example/v1', key: 'personal-test-key',
       model: 'gpt-image-test-flare', quality: 'low', complexity: 'medium'
     };
     // 実際に使っていたクラウド設定と、別途保存したローカルワークフローを同時に移行します。
@@ -55,6 +55,7 @@ async function main() {
       await page.fill('#cfConnectionName', name);
       await page.fill('#cfBase', endpoint);
       await page.fill('#cfKey', key);
+      await page.check('#cfProxy');
       await page.click('#cfConnectionSave');
     }
     async function createProfile(name, model) {

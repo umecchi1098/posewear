@@ -81,6 +81,8 @@ async function main() {
     // 接続の保存前でも、編集中のキーと接続先を使ってモデル一覧を取得します。
     await page.locator('#cfKey').fill('sk-openai-settings-test');
     await page.locator('#cfBase').fill(mockEndpoint);
+    // ここでは中継リクエストを検査するため、接続のプロキシを明示的に有効にします。
+    await page.check('#cfProxy');
     const pending = page.waitForRequest(r => r.headers()['x-target-url'] === mockEndpoint + '/models');
     await model.focus();
     await pending;

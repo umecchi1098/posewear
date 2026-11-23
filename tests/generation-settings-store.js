@@ -34,6 +34,13 @@ assert.equal(state.profiles.find(p => p.model === 'manual').quality, 'auto');
 assert.equal(values.has('wbCfg'), false);
 assert.equal(JSON.stringify(store.load()), JSON.stringify(state));
 
+// 旧版から移行した独自接続でも、再読込時に送信形式が変わらないことを確かめます。
+for (const proto of ['xai', 'gemini']) {
+  const migrated = context({wbCfg:JSON.stringify({prov:'custom', proto})}).store;
+  migrated.load();
+  assert.equal(migrated.resolve(migrated.load()).connection.proto, proto);
+}
+
 // 同一サービスの別接続と同名モデルでも、キーと任意項目は選んだ設定のものだけを使います。
 const second = store.saveConnection(state, {name:'2', prov:'openai', base:'https://second.test', key:'second-secret'});
 const saved = store.saveProfile(second.state, {name:'仕上げ', connectionId:second.connection.id, model:'manual', complexity:'high'});

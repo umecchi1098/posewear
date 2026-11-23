@@ -52,8 +52,7 @@ async function main() {
       }
     });
 
-    const history = page.locator('#wbHist button[data-t]');
-    const keys = () => history.evaluateAll(buttons => buttons.map(button => Number(button.dataset.t)));
+    const keys = () => page.evaluate(() => WB._W.hist.map(record => record.t));
     const deleteRecord = async key => {
       await page.locator(`[data-t="${key}"]`).hover();
       await page.locator(`[data-del="${key}"]`).click();
@@ -62,7 +61,7 @@ async function main() {
     const limit = page.locator('#wbLimit');
     const waitForHistory = (count, newestAfter = 0) => page.waitForFunction(({ count, newestAfter }) => {
       const rows = document.querySelectorAll('#wbHist button[data-t]');
-      return rows.length === count && Number(rows[0]?.dataset.t || 0) > newestAfter;
+      return WB._W.hist.length === count && rows.length === Math.min(30, count) && Number(rows[0]?.dataset.t || 0) > newestAfter;
     }, { count, newestAfter });
     const downloadZip = async selector => {
       const [download] = await Promise.all([page.waitForEvent('download'), page.locator(selector).click()]);
@@ -127,12 +126,12 @@ async function main() {
     assert.equal(beforeOverflow.at(-1), first);
     await busy.waitFor({ state: 'hidden' });
 
-    // 上限を超える操作では、 ZIP を保存しても確認画面に留まり、キャンセルで履歴と通信を変更しません。
+    // 40件を超える操作では、ZIP を保存しても確認画面に留まり、キャンセルで履歴と通信を変更しません。
     await page.selectOption('#wbN', '1');
     await page.click('#wbGo');
     await limit.waitFor();
     assert.equal(await page.locator('#wbLimitText').innerText(),
-      '現在の履歴は40件です。予定の1枚がすべて保存されると、古い1件が履歴から削除されます。');
+      '現在の履歴は40件です。予定の1枚を追加する前に、履歴をZIPで保存できます。');
     assert.equal(edits.length, 2);
     const confirmedBackup = await downloadZip('#wbLimitZip');
     assert.equal(confirmedBackup.size, 40);
@@ -149,11 +148,11 @@ async function main() {
     await limit.waitFor();
     await page.click('#wbLimitGo');
     await limit.waitFor({ state: 'hidden' });
-    await waitForHistory(40, beforeOverflow[0]);
+    await waitForHistory(41, beforeOverflow[0]);
     await busy.waitFor({ state: 'hidden' });
     const afterOverflow = await keys();
     assert.deepEqual(edits, Array(3).fill('https://api.openai.com/v1/images/edits'));
-    assert.deepEqual(afterOverflow.slice(1), beforeOverflow.slice(0, 39));
+    assert.deepEqual(afterOverflow.slice(1), beforeOverflow);
 
     // 直前に続行を選んでいても、次のダイアログを Esc で閉じるとキャンセルになります。
     await page.click('#wbGo');
@@ -163,9 +162,9 @@ async function main() {
     assert.deepEqual(await keys(), afterOverflow);
     assert.ok(await busy.isHidden());
     assert.equal(edits.length, 3);
-    console.log('PASS 上限ちょうどの生成、件数警告、送信前停止、ZIP 保存後の待機、キャンセルと Esc、最新40件');
+    console.log('PASS 上限ちょうどの生成、件数警告、送信前停止、ZIP 保存後の待機、キャンセルと Esc、41件を保持');
 
-    // 履歴38件で5ポーズを1枚ずつ試着し、ComfyUI のジョブ単位で上限が計算されることを確認します。
+    // 履歴198件で5ポーズを1枚ずつ試着し、ComfyUI のジョブ単位で上限が計算されることを確認します。
     const comfyRequests = [];
     let promptCount = 0;
     await page.route(comfyBase + '/**', async route => {
@@ -200,11 +199,17 @@ async function main() {
       }] });
     }, { base: comfyBase, workflow });
     await page.reload();
-    await waitForHistory(40);
-    await deleteRecord(afterOverflow.at(-1));
-    await waitForHistory(39);
-    await deleteRecord(afterOverflow.at(-2));
-    await waitForHistory(38);
+    await waitForHistory(41);
+    // 古い日時の履歴を足して、200件を超えるときだけ古い画像が削除されることを確認します。
+    await page.evaluate(async first => {
+      const sample = (await WB.db.hist())[0];
+      await WB.db.tx('readwrite', store => {
+        for (let i = 1; i <= 157; i++) store.put({...sample, t:first - i});
+      });
+    }, first);
+    await page.reload();
+    await waitForHistory(198);
+    const beforeBatch = await keys();
     await uploadInputs();
     await page.locator('.step[data-s="3"] .sh [data-pick="pose"]').click();
     const choices = page.locator('#pkG button[data-k]');
@@ -214,17 +219,17 @@ async function main() {
     await page.click('#wbGo');
     await limit.waitFor();
     assert.equal(await page.locator('#wbLimitText').innerText(),
-      '現在の履歴は38件です。予定の5枚がすべて保存されると、古い3件が履歴から削除されます。');
-    assert.equal((await downloadZip('#wbLimitZip')).size, 38);
+      '現在の履歴は198件です。予定の5枚がすべて保存されると、古い3件が履歴から削除されます。');
+    assert.equal((await downloadZip('#wbLimitZip')).size, 198);
     assert.ok(await limit.isVisible());
     assert.deepEqual(comfyRequests, []);
     await page.click('#wbLimitGo');
-    await waitForHistory(40, afterOverflow[0]);
+    await waitForHistory(200, afterOverflow[0]);
     await busy.waitFor({ state: 'hidden' });
     assert.equal(promptCount, 5);
-    assert.deepEqual((await keys()).slice(5), afterOverflow.slice(0, 35));
+    assert.deepEqual((await keys()).slice(5), beforeBatch.slice(0, 195));
     assert.deepEqual(errors, []);
-    console.log('PASS ComfyUI の38件＋5ポーズで削除見込み3件、ZIPは38件、続行後は最新40件');
+    console.log('PASS ComfyUI の198件＋5ポーズで削除見込み3件、ZIPは198件、続行後は最新200件');
   } finally {
     await browser.close();
   }

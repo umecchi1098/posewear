@@ -88,7 +88,9 @@ jobs:
 
       - name: アプリとカタログの参照先を検証
         run: |
+          python scripts/fetch-assets.py --modules-only
           python build.py
+          python tests/check_csp.py
           if [[ "$POSEWEAR_BUILD_ASSETS" == 1 ]]; then
             python scripts/pages-release.py snapshot
           elif [[ "$POSEWEAR_MEDIA_HOST" == "$POSEWEAR_PRODUCTION_SITE" ]]; then

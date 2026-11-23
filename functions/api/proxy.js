@@ -1,6 +1,7 @@
 // 衣姿 PoseWear 转发代理（v10）：只转发、不记录、不存储任何请求内容或密钥。
-// 限制：① 只接受本站页面发起的请求（Origin / Referer 同源）；② 只转发到官方接口域名，
-// 自定义中转必须带 x-proxy-custom: 1 且路径符合图片接口格式；③ 结果图片只从官方结果 CDN 下载；④ 每 IP 频率限制。
+// 限制：① 只接受本站页面发起的请求（Origin / Referer 同源）；② 官方接口只走标准 https；
+// 自定义中转必须带 x-proxy-custom: 1 且路径符合图片接口格式，可用 http/https 任意端口（内网地址除外）；
+// ③ 结果图片只从官方结果 CDN 下载；④ 每 IP 频率限制。
 const API_PATH=/^\/(api\/v3|v\d+(beta|alpha)?)\/(images\/(edits|generations)|models(\/[^/]+(:generateContent)?)?)$/;
 const OFFICIAL=[/^api\.openai\.com$/,/^generativelanguage\.googleapis\.com$/,/^ark\.[a-z0-9-]+\.volces\.com$/,/^ark\.[a-z0-9-]+\.bytepluses\.com$/];
 const IMG_HOSTS=[/^oaidalleapiprodscus\.blob\.core\.windows\.net$/,/(^|\.)volces\.com$/,/(^|\.)bytepluses\.com$/,/(^|\.)googleusercontent\.com$/];
@@ -19,15 +20,20 @@ export async function onRequest(ctx){const {request}=ctx;
   if(!['GET','POST'].includes(request.method))return j(405,'只支持 GET / POST');
   if(!sameSite(request))return j(403,'只接受本站页面发起的请求');
   let t;try{t=new URL(request.headers.get('x-target-url')||'')}catch(e){return j(400,'缺少或无效的 x-target-url')}
-  if(t.protocol!=='https:'||t.username||t.password||(t.port&&t.port!=='443'))return j(400,'目标地址必须是标准 https 地址');
-  const ip=request.headers.get('cf-connecting-ip')||'0';
+  if(t.username||t.password)return j(400,'目标地址不能带账号密码');
+  const official=OFFICIAL.some(r=>r.test(t.hostname));
   const img=request.headers.get('x-proxy-kind')==='image';
+  // 任意のポートを許可するのは独自 API 接続だけです。画像 CDN と公式 API は従来の HTTPS 制限を保ちます。
+  if(official||img){
+    if(t.protocol!=='https:'||(t.port&&t.port!=='443'))return j(400,'官方接口地址必须是标准 https 地址');
+  }else if(!/^https?:$/.test(t.protocol))return j(400,'目标地址必须是 http/https 地址');
+  const ip=request.headers.get('cf-connecting-ip')||'0';
   if(img){if(request.method!=='GET')return j(405,'图片下载只支持 GET');
     if(!IMG_HOSTS.some(r=>r.test(t.hostname)))return j(403,'该图片地址不在允许范围内');
     if(await over(ip,'img',ctx))return j(429,'请求过于频繁，请稍后再试');
     const r=await fetch(t.toString(),{redirect:'manual'}).catch(()=>null);const ct=r&&r.headers.get('content-type')||'';
     if(!r||!r.ok||!/^image\//.test(ct))return j(502,'结果图片下载失败');return new Response(r.body,{headers:{'content-type':ct,'cache-control':'no-store','x-content-type-options':'nosniff'}})}
-  const official=OFFICIAL.some(r=>r.test(t.hostname)),custom=request.headers.get('x-proxy-custom')==='1';
+  const custom=request.headers.get('x-proxy-custom')==='1';
   if(!official&&!custom)return j(403,'该地址不是官方接口；自定义中转需在设置中选择「自定义」');
   const path=t.pathname.replace(/\/+$/,'');
   if(official?!API_PATH.test(path):!/\/(images\/(edits|generations)|models(\/[^/]+(:generateContent)?)?)$/.test(path))return j(403,'该路径不允许通过代理转发');

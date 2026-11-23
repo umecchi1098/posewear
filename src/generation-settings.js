@@ -19,7 +19,8 @@
     if (prov === 'comfy') return {id, name, prov, base:window.ComfyUI.normalizeBase(value.base)};
     return {
       id, name, prov, base:text(value.base), key:text(value.key), proxy:value.proxy === true,
-      proto:value.proto === 'json' ? 'json' : 'edits', field:value.field === 'image' ? 'image' : 'image[]'
+      // 独自接続で選んだプロトコルを、設定の移行やバックアップの復元後も使います。
+      proto:['json', 'xai', 'gemini'].includes(value.proto) ? value.proto : 'edits', field:value.field === 'image' ? 'image' : 'image[]'
     };
   }
 

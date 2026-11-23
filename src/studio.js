@@ -8,9 +8,9 @@ const LS=k=>{try{return JSON.parse(localStorage[k]||'null')}catch(e){return null
 // ---------- 服务商 ----------
 const PROV={openai:{name:'OpenAI',base:'https://api.openai.com/v1',model:'gpt-image-1',models:[]},
  gemini:{name:'Gemini',base:'https://generativelanguage.googleapis.com/v1beta',model:'gemini-2.5-flash-image',models:['gemini-2.5-flash-image','gemini-3-pro-image-preview','gemini-3.1-flash-image']},
- seedream:{name:'豆包 Seedream',base:'https://ark.cn-beijing.volces.com/api/v3',model:'doubao-seedream-4-0-250828',models:['doubao-seedream-4-0-250828','doubao-seedream-4-5-251128','doubao-seedream-5-0-flash-260915']},
+ seedream:{name:'豆包 Seedream',base:'https://ark.cn-beijing.volces.com/api/v3',model:'doubao-seedream-5-5-261028',models:['doubao-seedream-5-5-261028','doubao-seedream-5-0-flash-260915','doubao-seedream-4-5-251128','doubao-seedream-4-0-250828']},
  comfy:{name:'ComfyUI',base:'http://127.0.0.1:8188',model:'',models:[]},
- custom:{name:'自定义中转',base:'',model:'gpt-image-1',models:['gpt-image-1','gpt-image-2','gemini-2.5-flash-image','flux-kontext-pro','qwen-image-edit','doubao-seedream-4-0-250828']}};
+ custom:{name:'自定义中转',base:'',model:'gpt-image-1',models:['gpt-image-1','gpt-image-2','grok-imagine-image-2.0','gemini-2.5-flash-image','flux-kontext-pro','qwen-image-edit','doubao-seedream-4-0-250828']}};
 // 接続と生成設定を組み合わせ、既存のクラウド送信・ワークフロー処理に渡します。
 // 設定を変更するたびに新しいオブジェクトを作るため、実行中の試着設定は変わりません。
 const generationStore=window.GenerationSettings;
@@ -39,12 +39,14 @@ const STYLES=[['keep','照片质感','photorealistic, matching the original phot
 const ANG_EN={'正面':'front view','斜侧':'three-quarter view','侧面':'side profile','俯拍':'high-angle shot looking down','仰拍':'low-angle shot looking up','背面':'back view','下から':'low angle'};
 // 保存済みの手動選択を引き継ぎ、初回や未知の値では英語で送信します。
 const savedPromptLanguage=LS('wbPl');
-const W={mode:LS('wbMode')||'tryon',persons:[],garments:[],poses:[],char:LS('wbChar')||'asia',charTxt:LS('wbCharTxt')||'',style:LS('wbStyle')||'keep',bm:LS('wbBm')||'each',pl:['en','zh','ja'].includes(savedPromptLanguage)?savedPromptLanguage:'en',keepBg:LS('wbKeepBg')??true,keepBody:LS('wbKeepBody')===true,busy:null,dirty:false,results:[],ri:0,cmp:true};
+const W={mode:LS('wbMode')||'tryon',persons:[],garments:[],poses:[],exprs:[],char:LS('wbChar')||'asia',charTxt:LS('wbCharTxt')||'',style:LS('wbStyle')||'keep',bm:LS('wbBm')||'each',pl:['en','zh','ja'].includes(savedPromptLanguage)?savedPromptLanguage:'en',keepBg:LS('wbKeepBg')??true,keepBody:LS('wbKeepBody')===true,busy:null,dirty:false,results:[],ri:0,cmp:true};
 // item: {kind:'lib',k,ai?} | {kind:'file',blob,url,name}
 const g0=LS('wbSel')||{};
 // ---------- 工具 ----------
 const normBase=b=>(b||'').trim().replace(/\/+$/,'');
-function root(cfgState=cfg){const cfg=cfgState;let b=normBase(cfg.base)||PROV[cfg.prov].base;if(cfg.prov=='gemini')return/\/v1(beta|alpha)?$/.test(b)?b:b+'/v1beta';if(cfg.prov=='seedream')return b;return/\/v\d+$/.test(b)?b:b+'/v1'}
+// カスタム接続でも選択された API 形式に合わせて認証・モデル一覧・生成を揃えます。
+const protocol=state=>state.prov=='openai'?'edits':state.prov=='custom'?state.proto:state.prov;
+function root(cfgState=cfg){const cfg=cfgState;let b=normBase(cfg.base)||PROV[cfg.prov].base;if(protocol(cfg)=='gemini')return/\/v1(beta|alpha)?$/.test(b)?b:b+'/v1beta';if(cfg.prov=='seedream')return b;return/\/v\d+$/.test(b)?b:b+'/v1'}
 const modelOf=(state=cfg)=>(state.model||'').trim()||PROV[state.prov].model;
 
 // 読み込みエラーはキーを保持し、エラー表示中に言語を切り替えても翻訳できるようにします。
@@ -57,7 +59,7 @@ function imageError(key,params){
 function loadImg(src){return new Promise((r,j)=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>r(i);i.onerror=()=>j(imageError('图片读取失败'));i.src=src})}
 async function toJpeg(src,max=1536){const i=await loadImg(src);let w=i.naturalWidth,h=i.naturalHeight,s=Math.min(1,max/Math.max(w,h));w=Math.round(w*s);h=Math.round(h*s);
  const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(i,0,0,w,h);return new Promise(r=>c.toBlob(b=>r({blob:b,w,h}),'image/jpeg',.92))}
-const libSrc=a=>{const it=A.ITEMS[a.k];return it.type=='pose'?it.angles[a.ai??it.ai].i:it.i};
+const libSrc=a=>{const it=A.ITEMS[a.k];return it.angles?it.angles[a.ai??it.ai].i:it.i};
 // コピーではAPI用の縮小を行わず、選択中の画像データを読み込みます。
 async function referenceBlob(asset,signal){
  if(asset.blob)return asset.blob;
@@ -74,7 +76,7 @@ function poseDesc(p,lang){
  const it=A.ITEMS[p.k];if(!it)return'';
  const a=it.angles[p.ai??it.ai];
  // 同じポーズでもカードと試着で別の角度を選べるため、試着側に保存した角度を使います。
- if(lang=='ja')return `${it.promptJa}（${it.lineJa}、${a.ja}）${/2人|双人/.test(it.line)?'。2人の人数と位置関係を線画に合わせる':''}`;
+ if(lang=='ja')return `${it.promptJa||it.ja||it.en}（${it.lineJa||it.line||''}、${a.ja||a.en||a.zh}）${/2人|双人/.test(it.line)?'。2人の人数と位置関係を線画に合わせる':''}`;
  return lang=='en'?`${it.en} (${it.lineEn}, ${ANG_EN[a.zh]||a.en||a.zh})${/2人|双人/.test(it.line)?' — a two-person pose: match the number of people and their relative positions':''}`:`${it.zh}（${it.line}，${a.zh}）${/2人|双人/.test(it.line)?'——双人姿势，人数与相对位置需与线稿一致':''}`}
 // 素材ごとの説明はそのまま使い、体の比率だけを人物参照に合わせる指示を加えます。
 const bodyInstructions = {
@@ -84,12 +86,15 @@ const bodyInstructions = {
 };
 function compose(poseSet,lang=W.pl){const en=lang=='en',P=W.persons.length,G=W.garments.length,ps=poseSet||W.poses,np=ps.length,sheet=np>1;const style=STYLES.find(s=>s[0]==W.style)||STYLES[0],ch=CHARS.find(c=>c[0]==W.char)||CHARS[0],ex=$('#wbExtra').value.trim();
  const gi=W.garments.map(g=>g.kind=='lib'&&A.ITEMS[g.k]).filter(Boolean);let n=0;const rng=(c)=>{if(!c)return null;const a=n+1,b=n+c;n=b;if(lang=='ja')return a==b?`画像${a}`:`画像${a}～${b}`;return a==b?(en?`image ${a}`:`第 ${a} 张`):(en?`images ${a}–${b}`:`第 ${a}–${b} 张`)};
- const rP=rng(P),rG=rng(G),rS=rng(np);const L=[];
+ // 表情はポーズの後に添付するので、指示文でも同じ画像番号を使います。
+ const expression=isComfy()?null:A.ITEMS[W.exprs[0]?.k];
+ const rP=rng(P),rG=rng(G),rS=rng(np),rE=rng(expression?1:0);const L=[];
  if(en){L.push(P?`Fashion ${isGen()?'image generation':'virtual try-on'} using reference images. ${rP} ${P>1?'show':'shows'} the person (same individual)${G?`; ${rG} ${G>1?'show':'shows'} the outfit${G>1?' pieces (top and bottom)':''} on an invisible mannequin`:''}${np?`; ${rS} ${np>1?'are':'is'} pose sketch${np>1?'es':''}`:''}.`:`Fashion image generation from reference images. ${G?`${rG} ${G>1?'show':'shows'} the outfit on an invisible mannequin`:''}${np?`; ${rS} ${np>1?'are':'is'} pose sketch${np>1?'es':''}`:''}.`);
   L.push(P?"Subject: the person from the photo. Preserve their face, identity, hairstyle, skin tone and body proportions exactly; they must stay recognisably the same adult.":`Subject: ${(W.char=='custom'?W.charTxt:ch[2])||ch[2]||'an adult model'}. Always an adult with adult proportions.`);
   if(G)L.push(`Outfit: dress the subject in the complete outfit from ${rG}, reproducing every garment faithfully — cut, color, fabric, pattern, layering, shoes and accessories${gi.length?': '+gi.map(x=>x.en.replace(/^[^,]*outfit,\s*/,'')).join('; '):''}. Replace the original clothing entirely. Never draw the mannequin or a blank body.`);
   if(np)L.push((sheet&&W.bm=='sheet'?`Pose: draw ${np} panels in one image, one per pose sketch, same subject and outfit in every panel, with even spacing and no text: `:'Pose: ')+ps.map((p,i)=>(sheet&&W.bm=='sheet'?`(${i+1}) `:'')+poseDesc(p,'en')).join('; ')+'. Use the sketch only for body posture, weight, limb placement and camera angle; never draw sketch lines, joint circles or guide marks.');
   else if(P)L.push('Pose: keep the original pose, framing and camera angle.');
+  if(expression)L.push(`Expression: ${rE} is a faceless neutral head model showing the target expression (${expression.en}). Give the subject exactly this facial expression. Transfer ONLY the expression — the subject's own facial features, face shape and identity must remain exactly as in the person photo; never copy the reference head's face.`);
   L.push(`Look: ${P&&W.keepBg&&!isGen()?'keep the original background and lighting of the photo; ':''}${style[2]}. Natural fabric drape with realistic folds and shadows, high detail. No text, no watermark, no borders.`);
   if(ex)L.push('Additional: '+ex)}
  else if(lang=='ja'){
@@ -100,12 +105,13 @@ function compose(poseSet,lang=W.pl){const en=lang=='en',P=W.persons.length,G=W.g
   if(np)L.push(`${rS}はポーズの線画。`);
   L.push(P?'人物：写真の人物の顔立ち、髪型、肌の色、体の比率と本人らしさを忠実に保ち、同じ成人だと分かるようにする。':
    `人物：${(W.char=='custom'?W.charTxt:ch[4])||'成人のモデル'}。成人の体型で描く。`);
-  if(G)L.push(`服装：${rG}のコーディネートにすべて着替え、形、色、生地、柄、重ね着、靴、アクセサリーを忠実に再現する。${gi.map(it=>it.promptJa).join(' ')}マネキンや中身のない体は描かない。`);
+  if(G)L.push(`服装：${rG}のコーディネートにすべて着替え、形、色、生地、柄、重ね着、靴、アクセサリーを忠実に再現する。${gi.map(it=>it.promptJa||it.ja||it.en).join(' ')}マネキンや中身のない体は描かない。`);
   if(np){
    const panels=sheet&&W.bm=='sheet';
    const poses=ps.map((p,i)=>(panels?`（${i+1}）`:'')+poseDesc(p,'ja'));
    L.push((panels?`ポーズ：線画ごとに1コマずつ、1枚に${np}コマを並べる。全コマで同じ人物と服装を保ち、余白は均等にして文字は入れない。`:'ポーズ：')+poses.join('、')+'。線画は姿勢・重心・手足の位置・カメラの角度の参考のみに使い、輪郭線、関節の丸、補助線は描かない。');
   }else if(P)L.push('ポーズ：元の写真の姿勢、構図、カメラの角度を保つ。');
+  if(expression)L.push(`表情：${rE}の参考画像（${expression.titleJa||expression.ja||expression.en}）と同じ表情にする。表情のみを反映し、元の人物の顔立ちと輪郭を保つ。`);
   L.push(`仕上げ：${P&&W.keepBg&&!isGen()?'元の背景と照明を保つ。':''}${style[4]}。布の落ち感やしわ、影を自然に描き、細部を鮮明にする。文字、透かし、枠は入れない。`);
   if(ex)L.push('追加指示：'+ex);
  }
@@ -114,6 +120,7 @@ function compose(poseSet,lang=W.pl){const en=lang=='en',P=W.persons.length,G=W.g
   if(G)L.push(`服装：为人物换上${rG}中的整套服装，准确还原版型、颜色、面料、图案、叠穿、鞋袜与配饰${gi.length?'：'+gi.map(x=>x.zh.replace(/[。.]$/,'')).join('；'):''}。完全替换原有衣物，不要画出人台或空白身体。`);
   if(np)L.push((sheet&&W.bm=='sheet'?`姿势：在同一张图中画 ${np} 格，每格对应一张线稿，人物与服装保持一致，均匀留白，不写文字：`:'姿势：')+ps.map((p,i)=>(sheet&&W.bm=='sheet'?`（${i+1}）`:'')+poseDesc(p,'zh')).join('；')+'。线稿只用于提取身体姿态、重心、四肢位置和镜头角度，不要画出线条、关节圆或辅助线。');
   else if(P)L.push('姿势：保持原照片的姿势、构图和拍摄角度。');
+  if(expression)L.push(`表情：${rE} 是一张无身份头模的表情参考（${expression.zh}）。让人物做出完全一致的表情。只迁移神态——人物本人的五官、脸型和身份必须与照片完全一致，不要照搬参考头的脸。`);
   L.push(`画面：${P&&W.keepBg&&!isGen()?'保留原照片的背景与光线；':''}${style[3]}。衣物垂坠自然，褶皱阴影真实，高细节。不要文字、水印或边框。`);
   if(ex)L.push('补充：'+ex)}
  if(P&&W.keepBody)L.push(bodyInstructions[lang]);
@@ -148,11 +155,11 @@ function reprompt(force){
 }
 // ---------- 渲染 ----------
 // 素材名と撮影角度は、現在の画面言語に対応するデータを表示します。
-const displayLabel=(zh,en,ja)=>({en,ja}[UI.locale]||t(zh));
+const displayLabel=(zh,en,ja)=>({en,ja}[UI.locale]||t(zh||''));
 const angleLabel=a=>displayLabel(a.zh,a.en,a.ja);
 function pickRow(a,type,i){const it=a.kind=='lib'&&A.ITEMS[a.k];if(a.kind=='lib'&&!it)return`<div class="empty0">${t('加载中…')}</div>`;
- const src=it?(type=='pose'?A.ath(it.angles[a.ai??it.ai].t):A.thumb(it)):a.url,name=it?A.title(it):(a.name||t('自定义图片')),sub=it?(it.type=='pose'?displayLabel(it.line,it.lineEn,it.lineJa)+' · '+angleLabel(it.angles[a.ai??it.ai]):displayLabel(it.cat,it.catEn,it.catJa)+' · '+it.id):(type=='costume'?(W.garments.length>1?t(i==0?'上装':'下装'):t('本地上传')):t('本地上传'));
- return`<div class="pick ${type}"><img src="${src}" alt="${esc(name)}"><div><b>${esc(name)}</b><small>${esc(sub)}</small></div>${type=='pose'&&it?`<select data-ang="${i}" aria-label="${esc(t('角度'))}">${it.angles.map((x,j)=>`<option value="${j}" ${j==(a.ai??it.ai)?'selected':''}>${esc(angleLabel(x))}</option>`).join('')}</select>`:''}<button class="rmx" data-rm="${type}" data-i="${i}" aria-label="${esc(t('移除'))}" title="${esc(t('移除'))}">×</button></div>`}
+ const src=it?(it.angles?A.ath(it.angles[a.ai??it.ai].t):A.thumb(it)):a.url,name=it?A.title(it):(a.name||t('自定义图片')),sub=it?(it.type=='pose'?displayLabel(it.line,it.lineEn,it.lineJa)+' · '+angleLabel(it.angles[a.ai??it.ai]):displayLabel(it.cat,it.catEn,it.catJa)+' · '+it.id):(type=='costume'?(W.garments.length>1?t(i==0?'上装':'下装'):t('本地上传')):t('本地上传'));
+ return`<div class="pick ${type}"><img src="${src}" alt="${esc(name)}"><div><b>${esc(name)}</b><small>${esc(sub)}</small></div>${(type=='pose'||type=='expr')&&it?.angles?`<select data-kind="${type}" data-ang="${i}" aria-label="${esc(t('角度'))}">${it.angles.map((x,j)=>`<option value="${j}" ${j==(a.ai??it.ai)?'selected':''}>${esc(angleLabel(x))}</option>`).join('')}</select>`:''}<button class="rmx" data-rm="${type}" data-i="${i}" aria-label="${esc(t('移除'))}" title="${esc(t('移除'))}">×</button></div>`}
 function render(localeOnly=false){
  const local=isComfy(),G=isGen(),poseEnabled=canPickPose();
  // 試着素材を用意したまま、接続別のリストで次に使う設定を選べます。
@@ -192,6 +199,9 @@ function render(localeOnly=false){
  $('#wbChars').innerHTML=CHARS.map(c=>`<button class="chip ${W.char==c[0]?'on':''}" data-char="${c[0]}">${t(c[1])}</button>`).join('');$('#wbCharTxt').hidden=W.char!='custom';if(!localeOnly)$('#wbCharTxt').value=W.charTxt;
  $('#wbG').innerHTML=W.garments.length?W.garments.map((g,i)=>pickRow(g,'costume',i)).join(''):`<button class="empty0" data-pick="costume"><span><b>${t('选择服装')}</b><small>${t('从库里选，或上传图片')}</small></span></button>`;
  $('#wbPo').innerHTML=W.poses.length?W.poses.map((p,i)=>pickRow(p,'pose',i)).join(''):`<button class="empty0" data-pick="pose"><span><b>${t('选择姿势（可选）')}</b><small>${t(G?'不选就随机':'不选就保持原姿势')}</small></span></button>`;
+ // 表情画像を受け取るノードがない ComfyUI ではこの入力を隠します。
+ $('#wbEx').closest('.step').hidden=local;
+ $('#wbEx').innerHTML=W.exprs.length?pickRow(W.exprs[0],'expr',0):`<button class="empty0" data-pick="expr"><span><b>${t('选择表情（可选）')}</b><small>${t('只取神态，不换脸')}</small></span></button>`;
  $('#wbBatch').hidden=local||W.poses.length<2;$$('[data-bm]').forEach(b=>b.classList.toggle('on',b.dataset.bm==W.bm));$('#wbAllAng').hidden=!poseEnabled||W.poses.length!=1||!A.ITEMS[(W.poses[0]||{}).k];
  $('#wbStyles').innerHTML=STYLES.map(s=>`<button class="chip ${W.style==s[0]?'on':''}" data-style="${s[0]}">${t(s[1])}</button>`).join('');$('#wbKeepBg').checked=W.keepBg;$('#wbKeepBg').closest('label').hidden=G||!hasPerson();
  $('#wbKeepBody').checked=W.keepBody;
@@ -218,7 +228,7 @@ function render(localeOnly=false){
  else{go.disabled=!!need;go.title=need?t(need):'';go.textContent=t(localError?'生成':need||'生成')}
  $$('.flow [data-f]').forEach(e=>e.classList.toggle('on',e.dataset.f<4?dn[e.dataset.f-1]&&(e.dataset.f!=3||W.poses.length>0):!need.length));
  if(localeOnly)return;
- SV('wbSel',{g:W.garments.filter(g=>g.kind=='lib').map(g=>g.k),p:W.poses.filter(p=>p.kind=='lib').map(p=>[p.k,p.ai])});reprompt()}
+ SV('wbSel',{g:W.garments.filter(g=>g.kind=='lib').map(g=>g.k),p:W.poses.filter(p=>p.kind=='lib').map(p=>[p.k,p.ai]),e:W.exprs.map(p=>[p.k,p.ai])});reprompt()}
 const outputCount=()=>isComfy()&&!comfy.mapping.seed?1:+$('#wbN').value||1;
 const nJobs=()=>poseSets().length*outputCount();
 function missingReference(){
@@ -234,7 +244,7 @@ drop.addEventListener('drop',e=>addPersons(e.dataTransfer.files));drop.addEventL
 $('#wbGFile').onchange=async e=>{const fs=[...e.target.files];e.target.value='';if(isComfy()&&fs.length!=1)return fs.length&&toast(COMFY_LIMIT);W.garments=isComfy()?[]:W.garments.filter(g=>g.kind=='file');for(const f of fs){if(W.garments.length>=2){toast('最多上传 2 张服装图（上装 + 下装）');break}const u=URL.createObjectURL(f);try{const r=await toJpeg(u,1280);URL.revokeObjectURL(u);W.garments.push({kind:'file',blob:r.blob,url:URL.createObjectURL(r.blob),name:f.name})}catch(x){toast('无法读取服装图')}}render()};
 document.addEventListener('paste',e=>{if(document.body.classList.contains('studio')&&!chatDialog.open&&!/INPUT|TEXTAREA/.test(document.activeElement.tagName)){const f=[...e.clipboardData.files].filter(f=>/^image/.test(f.type));if(f.length)addPersons(f)}});
 $('#studio').addEventListener('click',e=>{const t=e.target;let b;
- if(b=t.closest('[data-rm]')){const i=+b.dataset.i;b.dataset.rm=='pose'?W.poses.splice(i,1):W.garments.splice(i,1);render()}
+ if(b=t.closest('[data-rm]')){const i=+b.dataset.i;b.dataset.rm=='pose'?W.poses.splice(i,1):b.dataset.rm=='expr'?W.exprs.splice(i,1):W.garments.splice(i,1);render()}
  if(b=t.closest('[data-rmp]')){W.persons.splice(+b.dataset.rmp,1);render()}
  if(b=t.closest('[data-pick]'))picker(b.dataset.pick);
  if(b=t.closest('[data-pl]')){W.pl=b.dataset.pl;SV('wbPl',W.pl);reprompt(true);render()}
@@ -242,7 +252,7 @@ $('#studio').addEventListener('click',e=>{const t=e.target;let b;
  if(b=t.closest('[data-char]')){W.char=b.dataset.char;SV('wbChar',W.char);render()}
  if(b=t.closest('[data-style]')){W.style=b.dataset.style;W.dirtyStyle=1;SV('wbStyle',W.style);render()}
  if(b=t.closest('[data-bm]')){W.bm=b.dataset.bm;SV('wbBm',W.bm);render()}});
-$('#studio').addEventListener('change',e=>{const s=e.target.closest('[data-ang]');if(s){W.poses[+s.dataset.ang].ai=+s.value;render()}if(e.target.id=='wbN')render();if(e.target.id=='wbKeepBg'){W.keepBg=e.target.checked;SV('wbKeepBg',W.keepBg);render()}});
+$('#studio').addEventListener('change',e=>{const s=e.target.closest('[data-ang]');if(s){(s.dataset.kind=='expr'?W.exprs:W.poses)[+s.dataset.ang].ai=+s.value;render()}if(e.target.id=='wbN')render();if(e.target.id=='wbKeepBg'){W.keepBg=e.target.checked;SV('wbKeepBg',W.keepBg);render()}});
 // 選択は次回も復元し、指示の有無をその場でプロンプトに反映します。
 $('#wbKeepBody').onchange=e=>{
  W.keepBody=e.target.checked;
@@ -267,7 +277,7 @@ function renderChatJob(){
  chatImages.innerHTML=job.images.map(({asset,role},index)=>{
   const item=A.ITEMS[asset.k];
   const name=item?A.title(item):asset.name||'';
-  const angle=role=='姿势'?angleLabel(item.angles[asset.ai??item.ai]):'';
+  const angle=item?.angles?angleLabel(item.angles[asset.ai??item.ai]):'';
   const src=asset.url||(angle?A.ath(item.angles[asset.ai??item.ai].t):A.thumb(item));
   const label=t('参考图 {count}',{count:index+1});
   return `<li class="chat-reference"><img src="${esc(src)}" alt="">
@@ -281,7 +291,7 @@ $('#wbChatOpen').onclick=()=>{
  const shared=[...W.persons.map(asset=>({asset,role:'人物照片'})),...W.garments.map(asset=>({asset,role:'服装'}))];
  const edited=W.dirty?$('#wbPrompt').value:'';
  chatJobs=poseSets().map(set=>({
-  images:[...shared,...set.map(asset=>({asset,role:'姿势'}))],
+  images:[...shared,...set.map(asset=>({asset,role:'姿势'})),...(!isComfy()?W.exprs:[]).map(asset=>({asset,role:'表情'}))],
   prompt:edited.trim()?edited:compose(set)
  }));
  chatPose.replaceChildren(...chatJobs.map((job,index)=>new Option(t('姿势 {count}',{count:index+1}),String(index))));
@@ -361,7 +371,7 @@ chatImages.onclick=async event=>{
 let pkType='costume',pkSelected=false;
 function pickerTitle(){
  $('#pkT').textContent=pkType=='pose'&&pkSelected?t('选姿势（{count}/6）',{count:W.poses.length}):
-  t({pose:'选择姿势（可多选，最多 6 个）',portrait:'选择人像（作为人物 / 脸部参考）',anime:'选择动画服装',costume:'选择服装'}[pkType]);
+  t({pose:'选择姿势（可多选，最多 6 个）',portrait:'选择人像（作为人物 / 脸部参考）',expr:'选择表情（只迁移神态，不换脸）',anime:'选择动画服装',costume:'选择服装'}[pkType]);
 }
 async function picker(type){if(type=='pose'&&!canPickPose())return toast(COMFY_POSE);pkType=type;pkSelected=false;pickerTitle();$('#pkDone').hidden=type!='pose';$('#pk').hidden=false;document.body.style.overflow='hidden';$('#pkQ').value='';$('#pkG').innerHTML='<div class="skel"></div>'.repeat(12);await A.load(type);drawPk();setTimeout(()=>$('#pkQ').focus(),50)}
 function drawPk(){
@@ -375,6 +385,7 @@ function drawPk(){
 let pq;$('#pkQ').oninput=()=>{clearTimeout(pq);pq=setTimeout(drawPk,150)};const pkClose=()=>{$('#pk').hidden=true;document.body.style.overflow='';render()};$('#pkX').onclick=pkClose;$('#pkDone').onclick=pkClose;
 $('#pk').onclick=e=>{if(e.target.id=='pk')return pkClose();const b=e.target.closest('[data-k]');if(!b)return;const k=b.dataset.k;
  if(pkType=='pose'){const i=W.poses.findIndex(p=>p.k==k);if(i>=0)W.poses.splice(i,1);else if(W.poses.length>=6)return toast('最多选择 6 个姿势');else W.poses.push({kind:'lib',k,ai:A.ITEMS[k].ai});b.classList.toggle('on',i<0);pkSelected=true;pickerTitle()}
+ else if(pkType=='expr'){W.exprs=[{kind:'lib',k,ai:A.ITEMS[k].ai}];pkClose()}
  else if(pkType=='portrait'){pkClose();addPortrait(A.ITEMS[k])}
  else{W.garments=[{kind:'lib',k}];pkClose()}};
 // ---------- 设置 ----------
@@ -723,7 +734,7 @@ $('#cfTest').onclick=async()=>{
  if(o.prov=='custom'&&!o.base)return report('请填写 Base URL',1);
  report('正在连接…');
  try{
-  const g=o.prov=='gemini',url=g?`${root(o)}/models/${encodeURIComponent(modelOf(o))}`:`${root(o)}/models`;
+  const g=protocol(o)=='gemini',url=g?`${root(o)}/models/${encodeURIComponent(modelOf(o))}`:`${root(o)}/models`;
   const r=await call(url,{method:'GET',headers:auth(o)},o),j=await r.json().catch(()=>null);
   if(!r.ok){
    if(o.prov=='seedream'&&r.status==404)return report('地址可达、密钥已被接受（方舟不提供模型列表接口，可直接生成测试）');
@@ -738,17 +749,17 @@ $('#cfTest').onclick=async()=>{
  }catch(e){report(()=>nice(e),1)}
 };
 // ---------- 请求 ----------
-function auth(state=cfg){const cfg=state;return cfg.prov=='gemini'?{'x-goog-api-key':cfg.key}:{Authorization:'Bearer '+cfg.key}}
+function auth(state=cfg){const cfg=state;return protocol(cfg)=='gemini'?{'x-goog-api-key':cfg.key}:{Authorization:'Bearer '+cfg.key}}
 const p2=n=>String(n).padStart(2,'0'),stamp=d=>`${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
 const OFF=/^(api\.openai\.com|generativelanguage\.googleapis\.com|ark\.[a-z0-9-]+\.(volces|bytepluses)\.com)$/;
-function call(url,o,state=cfg){const cfg=state;let hn='';try{hn=new URL(url).hostname}catch(e){}const cu=cfg.prov=='custom'||!OFF.test(hn);if(!cfg.proxy&&!cu)return fetch(url,o);const h=new Headers(o.headers||{});h.set('x-target-url',url);if(cu)h.set('x-proxy-custom','1');return fetch('/api/proxy',Object.assign({},o,{headers:h}))}
+function call(url,o,state=cfg){const cfg=state;let hn='';try{hn=new URL(url).hostname}catch(e){}const cu=cfg.prov=='custom'||!OFF.test(hn);if(!cfg.proxy)return fetch(url,o);const h=new Headers(o.headers||{});h.set('x-target-url',url);if(cu)h.set('x-proxy-custom','1');return fetch('/api/proxy',Object.assign({},o,{headers:h}))}
 async function fetchResult(url){let r=await fetch(url).catch(()=>null);if(!r||!r.ok)r=await fetch('/api/proxy',{headers:{'x-target-url':url,'x-proxy-kind':'image'}}).catch(()=>null);if(r&&r.ok)return r.blob();const e=Error('');e.ui=()=>t('结果图片无法在浏览器中下载，请直接打开：{url}',{url});throw e}
 
 const SAFE_RE=/safety system|safety_violations|moderation_blocked|content_policy_violation|content policy|SensitiveContent|sensitive content|PROHIBITED_CONTENT|IMAGE_SAFETY|\bSAFETY\b|BLOCKLIST|SPII|blocked by|内容安全|敏感/i;
 const CAT=[[/minor|child|CSAM/i,'涉及未成年人'],[/sexual|SEXUALLY_EXPLICIT|nudity|porn|色情/i,'性感/暴露内容'],[/violen|gore|血腥|暴力/i,'暴力或血腥'],[/self-?harm/i,'自残'],[/hate|HATE_SPEECH/i,'仇恨'],[/harass/i,'骚扰'],[/illicit|DANGEROUS/i,'危险或违法内容'],[/SPII|personal/i,'个人隐私信息'],[/copyright|RECITATION|trademark/i,'版权内容']];
-function safeErr(raw,j,rid,state=cfg){const cfg=state;const t=String(raw||'')+' '+JSON.stringify(j||'');if(!SAFE_RE.test(t))return null;const e=Error(String(raw||'safety'));const c=CAT.filter(x=>x[0].test(t)).map(x=>x[1]);
- e.safe={cats:[...new Set(c)],where:/InputImage|input image/i.test(t)?'in':/OutputImage|output/i.test(t)?'out':'',rid:rid||(t.match(/req_[A-Za-z0-9]+/)||[])[0]||''};
- let r=String(raw||'').trim();if(cfg.key)r=r.split(cfg.key).join('***');e.raw=r||t.slice(0,600);e.ui=()=>t('被服务商的安全审核拦下了');return e}
+function safeErr(raw,j,rid,state=cfg){const cfg=state;const detail=String(raw||'')+' '+JSON.stringify(j||'');if(!SAFE_RE.test(detail))return null;const e=Error(String(raw||'safety'));const c=CAT.filter(x=>x[0].test(detail)).map(x=>x[1]);
+ e.safe={cats:[...new Set(c)],where:/InputImage|input image/i.test(detail)?'in':/OutputImage|output/i.test(detail)?'out':'',rid:rid||(detail.match(/req_[A-Za-z0-9]+/)||[])[0]||''};
+ let r=String(raw||'').trim();if(cfg.key)r=r.split(cfg.key).join('***');e.raw=r||detail.slice(0,600);e.ui=()=>t('被服务商的安全审核拦下了');return e}
 async function apiErr(r,j,state=cfg){const cfg=state;if(j===undefined)j=await r.json().catch(()=>null);const raw=(j&&(j.error&&(j.error.message||j.error.status||j.error)||j.message))||r.statusText||'';{const se=safeErr(typeof raw=='string'?raw:JSON.stringify(raw),j,(j&&j.error&&j.error.request_id)||r.headers.get('x-request-id'),state);if(se){se.status=r.status;return se}}
  const m={400:'请求参数有误：常见原因是模型不支持参考图、画幅尺寸不对或图片格式不支持，可换个模型或画幅再试',401:'密钥无效或已过期，请检查 API Key',403:'没有权限：密钥无此模型权限、账户未验证，或所在地区不受支持',404:'地址或模型不存在：请检查 Base URL 和模型名',413:'图片太大，请换一张更小的照片',429:'请求过于频繁或额度已用完，请稍后再试或检查账户余额',500:'服务商内部错误，请稍后重试',502:'网关错误（中转服务不可用）',503:'服务暂时不可用，请稍后重试',504:'服务商响应超时，请重试'}[r.status]||'请求失败（HTTP {status}）';
  let t=String(typeof raw=='string'?raw:JSON.stringify(raw));if(cfg.key)t=t.split(cfg.key).join('***');const bad=/API_KEY_INVALID|API key not valid|invalid api key|Incorrect API key|AuthenticationError|InvalidApiKey/i.test(t+' '+JSON.stringify(j||''));const e=Error(t);e.status=r.status;
@@ -756,7 +767,8 @@ async function apiErr(r,j,state=cfg){const cfg=state;if(j===undefined)j=await r.
  if(cfg.prov=='openai' && (cfg.quality || cfg.complexity)){
   e.imageOptionError=['quality','complexity'].includes(j?.error?.param) || /\b(quality|complexity)\b/i.test(t);
  }
- e.ui=()=>apiMessage(bad?'密钥无效或已过期，请检查 API Key':m,r.status,t);return e}
+ const unsupported=!bad&&t.match(/Argument not supported:\s*(\w+)/i);
+ e.ui=()=>unsupported?UI.t('该服务商不支持 {param} 参数：请检查接口协议设置（xAI 请改选 xAI 协议）。',{param:unsupported[1]}):apiMessage(bad?'密钥无效或已过期，请检查 API Key':m,r.status,t);return e}
 // プロキシ由来の既知の文言を翻訳し、提供元の任意の応答はそのまま表示します。
 function apiMessage(key,status,detail){
  const header=t(key,{status});
@@ -772,7 +784,7 @@ function geminiMessage(reason,detail){
  return detail?header+'\n'+t('模型回复：{detail}',{detail:detail.slice(0,300)}):header;
 }
 async function genOnce(imgs,prompt,sig,cfg,ar){
- const m=modelOf(cfg),P=cfg.prov=='openai'?'edits':cfg.prov=='custom'?cfg.proto:cfg.prov;
+ const m=modelOf(cfg),P=protocol(cfg);
  let warn='';
  if(P=='gemini'){const parts=[{text:prompt}];for(const b of imgs)parts.push({inline_data:{mime_type:b.type||'image/jpeg',data:await b64(b)}});const gc={responseModalities:['TEXT','IMAGE']};if(ar!='auto')gc.imageConfig={aspectRatio:ar};
   const r=await call(`${root(cfg)}/models/${encodeURIComponent(m)}:generateContent`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth(cfg)),body:JSON.stringify({contents:[{role:'user',parts}],generationConfig:gc})},cfg);
@@ -787,14 +799,18 @@ async function genOnce(imgs,prompt,sig,cfg,ar){
  }
  const json=async(withImgs,extra)=>{const body=Object.assign({model:m,prompt,n:1},extra,imageOptions);if(withImgs&&imgs.length)body.image=await Promise.all(imgs.map(dataURL));
   const r=await call(`${root(cfg)}/images/generations`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth(cfg)),body:JSON.stringify(body)},cfg);const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j,cfg);return openaiData(j)};
- if(P=='seedream'){const ex={size:SD[ar]||SD.auto,response_format:'b64_json',watermark:false,sequential_image_generation:'disabled'};try{return{blob:await json(true,ex)}}catch(e){if(!e.safe&&e.status==400&&/image|参考/i.test(e.message)){warn='该模型没有接收参考图，结果只按文字生成，人物与服装可能对不齐。';return{blob:await json(false,ex),warn}}throw e}}
+ if(P=='seedream'){const ex={size:SD[ar]||SD.auto,response_format:'b64_json',watermark:false};if(/seedream-4/.test(m))ex.sequential_image_generation='disabled';try{return{blob:await json(true,ex)}}catch(e){if(!e.safe&&e.status==400&&/image|参考/i.test(e.message)){warn='该模型没有接收参考图，结果只按文字生成，人物与服装可能对不齐。';return{blob:await json(false,ex),warn}}throw e}}
+ if(P=='xai'){const body={model:m,prompt,n:1,response_format:'b64_json'};if(ar!='auto')body.aspect_ratio=ar;let used=imgs;
+  if(imgs.length>5){used=imgs.slice(0,5);warn='xAI 参考图最多 5 张，已只发送前 5 张。'}
+  if(used.length){const us=await Promise.all(used.map(dataURL));if(us.length==1)body.image={url:us[0]};else body.images=us.map(u=>({url:u}))}
+  const r=await call(`${root(cfg)}/images/${used.length?'edits':'generations'}`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth(cfg)),body:JSON.stringify(body)},cfg);const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j,cfg);return{blob:await openaiData(j),warn}}
  const sz=AR[ar]||(/^gpt-image/.test(m)?'auto':'1024x1024');
  if(P=='json')return{blob:await json(true,{size:sz})};
  const edits=async field=>{const fd=new FormData();fd.append('model',m);fd.append('prompt',prompt);const one=/^dall-e-2$/.test(m);(one?imgs.slice(0,1):imgs).forEach((b,i)=>fd.append(field,b,`ref-${i+1}.jpg`));fd.append('n','1');fd.append('size',one&&sz=='auto'?'1024x1024':sz);
   for(const [name,value] of Object.entries(imageOptions))fd.append(name,value);
   const r=await call(`${root(cfg)}/images/edits`,{method:'POST',signal:sig,headers:auth(cfg),body:fd},cfg);const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j,cfg);return openaiData(j)};
  const f0=cfg.prov=='custom'?cfg.field:'image[]';
- try{return{blob:await edits(f0)}}catch(e){if(e.name=='AbortError'||e.safe||e.imageOptionError)throw e;
+ try{return{blob:await edits(f0)}}catch(e){if(e.name=='AbortError'||e.safe||e.imageOptionError||/Argument not supported/i.test(e.message))throw e;
   if(e.status==400&&/image/i.test(e.message)&&!/safety|moderation|reject/i.test(e.message)){try{return{blob:await edits(f0=='image[]'?'image':'image[]'),warn:'已自动改用另一种图片字段名重试成功。'}}catch(x){if(x.imageOptionError||x.safe||x.name=='AbortError')throw x}}
   if([404,405,415,501].includes(e.status)||/edits|not supported|unsupported|no such|invalid url/i.test(e.message)){try{return{blob:await json(true,{size:sz}),warn:'该接口不支持 images/edits，已自动改用 images/generations（JSON 多图）。'}}catch(x){if(x.name=='AbortError'||x.safe||x.imageOptionError)throw x;return{blob:await json(false,{size:sz}),warn:'该接口不支持参考图，结果只按文字生成，人物与服装可能对不齐。'}}}
   throw e}}
@@ -820,7 +836,7 @@ const COMFY_STAGES={
  waiting:'正在等待 ComfyUI 结果…',
  downloading:'正在下载 ComfyUI 结果…'
 };
-const HISTORY_LIMIT=40;
+const HISTORY_LIMIT=200;
 const limitDialog=$('#wbLimit');
 limitDialog.addEventListener('keydown',event=>event.stopPropagation());
 // 保存ボタンはダイアログを閉じないので、保存した後も生成するかどうかを選べます。
@@ -842,26 +858,32 @@ async function confirmHistorySpace(planned){
  const current=await tx('readonly',store=>store.count()).catch(()=>W.hist?.length||0);
  if(W.busy.signal.aborted)return false;
  const removed=current+planned-HISTORY_LIMIT;
- if(removed<=0)return true;
+ // 40件を超える時はバックアップを案内し、実際に削除が始まる200件と区別します。
+ if(current+planned<=40)return true;
+ $('#wbLimitTitle').textContent=t(removed>0?'生成历史将超过上限':'打包历史图片');
  $('#wbBusy').hidden=true;
- $('#wbLimitText').textContent=t('现有 {current} 条记录。如果计划生成的 {planned} 张图片全部保存，最早的 {removed} 条记录将被删除。',{current,planned,removed});
+ $('#wbLimitText').textContent=t(removed>0?'现有 {current} 条记录。如果计划生成的 {planned} 张图片全部保存，最早的 {removed} 条记录将被删除。':'现有 {current} 条记录，计划新增 {planned} 张图片。可以先将历史图片保存为 ZIP。',{current,planned,removed});
  $('#wbLimitStatus').textContent='';
  // Escで閉じたとき、前回の「生成を続ける」が選択結果に残らないようにします。
  limitDialog.returnValue='';
  limitDialog.showModal();
  return new Promise(resolve=>limitDialog.addEventListener('close',()=>resolve(limitDialog.returnValue==='generate'),{once:true}));
 }
-async function runComfy(){
- if(!hasPerson())return toast('请先上传人物照片');
- if(!W.garments.length)return toast('请先选择服装');
- if(W.persons.length!=1||W.garments.length!=1)return toast(COMFY_LIMIT);
- if(!canPickPose()&&W.poses.length)return toast(COMFY_POSE);
+async function runComfy(opts){
+ // トレイ上では結果や検証エラーをトレイに返し、作業台では従来の表示を使います。
+ const fail=message=>opts.quick?{got:[],errs:[imageError(message)]}:toast(message);
+ if(!hasPerson())return fail('请先上传人物照片');
+ if(!W.garments.length)return fail('请先选择服装');
+ if(W.persons.length!=1||W.garments.length!=1)return fail(COMFY_LIMIT);
+ if(!canPickPose()&&W.poses.length)return fail(COMFY_POSE);
+ if(opts.quick&&W.exprs.length)return fail('ComfyUI 工作流不支持表情参考。');
  if(!comfy.workflow){toast('请选择 ComfyUI 试穿工作流。');return cfgOpen()}
  const ac=new AbortController(),before=W.persons[0].blob,reference=W.garments[0];
  const {base,workflow,mapping,name}=comfy;
- const count=outputCount(),ratio=$('#wbAR').value;
+ const count=mapping.seed?(opts.n||outputCount()):1,ratio=opts.ar||$('#wbAR').value;
  const aspect=mapping.aspect&&ratio!='auto'?ratio:undefined;
- const edited=W.dirty?$('#wbPrompt').value.trim():'';
+ const language=opts.quick?quickLanguage:W.pl;
+ const edited=opts.prompt??(W.dirty?$('#wbPrompt').value.trim():'');
  const output=[],errors=[];
  // 画像の取得を待つ前に各ジョブのプロンプトと角度を確定し、シート出力は使いません。
  const sets=poseSets().map(set=>({
@@ -871,7 +893,7 @@ async function runComfy(){
  // 繰り返し出力はジョブごとに異なるシードを使います。1枚だけならグラフの値を保ちます。
  const firstSeed=mapping.seed&&sets.length*count>1?crypto.getRandomValues(new Uint32Array(1))[0]:undefined;
  W.busy=ac;
- if(!await confirmHistorySpace(sets.length*count)){W.busy=null;busy(false);return}
+ if(!await confirmHistorySpace(sets.length*count)){W.busy=null;busy(false);return {got:[],errs:[]}}
  done=0;total=sets.length*count;
  let savedAny=false,saveFailed=false;
  busy(true);stage('正在准备素材…');
@@ -899,26 +921,27 @@ async function runComfy(){
    await window.ComfyUI.generateBatch({
     base,workflow,mapping,person:before,garment,jobs,signal:ac.signal,
     onProgress:progress=>stage(COMFY_STAGES[progress]),
-    onError(error){errors.push(error);done++},
+    onError(error){errors.push(error);done++;opts.onTick?.(done,total)},
     async onResult(after,index){
      const job=jobs[index],it=A.ITEMS[job.poseKey];
      const rec={
       t:Date.now()+Math.random(),prov:'comfy',model:name,mode:'tryon',before,after,
-      prompt:job.prompt,poseNames:it?[{zh:it.zh,en:it.titleEn,ja:it.titleJa}]:[]
+      prompt:job.prompt,promptLanguage:language,poseNames:it?[{zh:it.zh,en:it.titleEn,ja:it.titleJa}]:[]
      };
      if(await save(rec))savedAny=true;
      else saveFailed=true;
-     output.push(rec);done++;W.results=output.slice();show(output.length-1);
+     output.push(rec);done++;opts.onTick?.(done,total);W.results=output.slice();if(!opts.quick)show(output.length-1);
     }
    });
   }
   if(output.length)toast(output.length>1?'完成 {count} 张':'生成完成',null,{count:output.length});
-  if(errors.length){
+  if(errors.length&&!opts.quick){
    const error=errors[0];
    errBox(error.code?imageError(COMFY_ERRORS[error.code]||COMFY_ERRORS.execution):error,errors.length>1||output.length?errors.length:0);
   }
  }catch(error){
-  if(ac.signal.aborted)toast('已停止等待。请在 ComfyUI 中查看队列。');
+  if(opts.quick)errors.push(error);
+  else if(ac.signal.aborted)toast('已停止等待。请在 ComfyUI 中查看队列。');
   else errBox(error.code?imageError(COMFY_ERRORS[error.code]||COMFY_ERRORS.execution):error);
  }finally{
   if(savedAny)hist();
@@ -929,30 +952,37 @@ async function runComfy(){
   }
   W.busy=null;busy(false);
  }
+ return {got:output,errs:errors,warns:saveFailed?warnings:[]};
 }
-async function run(){if(W.busy)return;if(isComfy())return runComfy();if(!cfg.key){toast('请先配置你的 API');return cfgOpen()}const need=missingReference();if(need)return toast(need);
+async function run(opts={}){
+ if(W.busy)return {got:[],errs:[imageError('生成中…')]};
+ if(isComfy())return runComfy(opts);
+ if(!cfg.key){toast('请先配置你的 API');cfgOpen();return {got:[],errs:[],nokey:true}}
+ if(!opts.quick){const need=missingReference();if(need)return toast(need)}
+ const mode=opts.quick&&!hasPerson()?'gen':W.mode;
  // 開始時の設定と画角を全画像で共有し、履歴にも同じモデルを記録します。
- const runSettings=cfg,aspectRatio=$('#wbAR').value;
+ const runSettings=cfg,aspectRatio=opts.ar||$('#wbAR').value;
  const ac=new AbortController();W.busy=ac;
  // 非同期の画像読み込みが始まる前に、表示中の送信言語と本文を画像ごとに確定します。
- const n=+$('#wbN').value||1,jobs=[],pl=W.pl,edited=W.dirty?$('#wbPrompt').value.trim():'';
+ const n=opts.n||+$('#wbN').value||1,jobs=[],pl=opts.quick?quickLanguage:W.pl,edited=opts.prompt??(W.dirty?$('#wbPrompt').value.trim():'');
  for(const set of poseSets()){
   const prompt0=edited||compose(set,pl),soft=neutralOn()&&!isAdultJob(set);
   const prompt=soft?neutralize(prompt0,pl):prompt0;
   for(let i=0;i<n;i++)jobs.push({set,prompt0,soft,prompt});
  }
- if(!await confirmHistorySpace(jobs.length)){W.busy=null;busy(false);return}
+ if(!await confirmHistorySpace(jobs.length)){W.busy=null;busy(false);return {got:[],errs:[]}}
  done=0;total=jobs.length;busy(true);stage('正在准备素材…');const errs=[],warns=new Set(),got=[];
- try{const pb=W.persons.map(p=>p.blob),gb=await Promise.all(W.garments.map(g=>assetBlob(g,ac.signal))),cache=new Map();const poseB=async p=>{const key=p.k+':'+p.ai;if(!cache.has(key))cache.set(key,assetBlob(p,ac.signal));return cache.get(key)};
+ try{const pb=W.persons.map(p=>p.blob),gb=await Promise.all(W.garments.map(g=>assetBlob(g,ac.signal))),eb=await Promise.all(W.exprs.map(e=>assetBlob(e,ac.signal))),cache=new Map();const poseB=async p=>{const key=p.k+':'+p.ai;if(!cache.has(key))cache.set(key,assetBlob(p,ac.signal));return cache.get(key)};
   stage(total>1?'模型正在绘制… 共 {count} 张':'模型正在绘制…',{count:total});
-  let q=0;const worker=async()=>{while(q<jobs.length&&!ac.signal.aborted){const {set,prompt0,soft,prompt}=jobs[q++];try{const imgs=[...pb,...gb,...await Promise.all(set.map(poseB))];W.lastSent=prompt;
-    const jc=new AbortController(),onA=()=>jc.abort();ac.signal.addEventListener('abort',onA);let tmo=false;const tm=setTimeout(()=>{tmo=true;jc.abort()},window.__TMO||180000);let r;try{r=await genOnce(imgs,prompt,jc.signal,runSettings,aspectRatio)}catch(x){x.sent=prompt;if(tmo&&!ac.signal.aborted){const y=Error('timeout');y.ui=()=>t('等了 3 分钟还没有返回。服务商可能正忙，稍后点「重试」。');throw y}throw x}finally{clearTimeout(tm);ac.signal.removeEventListener('abort',onA)}if(r.warn)warns.add(r.warn);const rec={t:Date.now()+Math.random(),prov:runSettings.prov,model:modelOf(runSettings),prompt,orig:soft?prompt0:null,neutral:soft,mode:W.mode,label:set.map(p=>poseDesc(p,'zh').split('（')[0]).join(' / ')||'',poseNames:set.map(p=>A.ITEMS[p.k]).filter(Boolean).map(it=>({zh:it.zh,en:it.titleEn,ja:it.titleJa})),before:pb[0]||null,after:r.blob};got.push(rec);await save(rec);W.results=got.slice();show(got.length-1)}
-   catch(e){if(e.name=='AbortError')throw e;errs.push(e)}finally{done++}}};
+  let q=0;const worker=async()=>{while(q<jobs.length&&!ac.signal.aborted){const {set,prompt0,soft,prompt}=jobs[q++];try{const imgs=[...pb,...gb,...await Promise.all(set.map(poseB)),...eb];W.lastSent=prompt;
+    const jc=new AbortController(),onA=()=>jc.abort();ac.signal.addEventListener('abort',onA);let tmo=false;const tm=setTimeout(()=>{tmo=true;jc.abort()},window.__TMO||180000);let r;try{r=await genOnce(imgs,prompt,jc.signal,runSettings,aspectRatio)}catch(x){x.sent=prompt;if(tmo&&!ac.signal.aborted){const y=Error('timeout');y.ui=()=>t('等了 3 分钟还没有返回。服务商可能正忙，稍后点「重试」。');throw y}throw x}finally{clearTimeout(tm);ac.signal.removeEventListener('abort',onA)}if(r.warn)warns.add(r.warn);const rec={t:Date.now()+Math.random(),prov:runSettings.prov,model:modelOf(runSettings),prompt,promptLanguage:pl,orig:soft?prompt0:null,neutral:soft,mode,label:set.map(p=>poseDesc(p,'zh').split('（')[0]).join(' / ')||'',poseNames:set.map(p=>A.ITEMS[p.k]).filter(Boolean).map(it=>({zh:it.zh,en:it.titleEn,ja:it.titleJa})),before:pb[0]||null,after:r.blob};got.push(rec);if(!await save(rec))warns.add('无法保存试穿记录，请下载结果图片。');W.results=got.slice();if(!opts.quick)show(got.length-1)}
+   catch(e){if(e.name=='AbortError')throw e;errs.push(e)}finally{done++;opts.onTick?.(done,total)}}};
   await Promise.all(Array.from({length:Math.min(2,jobs.length)},worker));
-  if(got.length){toast(got.length>1?'完成 {count} 张':'生成完成',null,{count:got.length});hist()}if(errs.length){const e=errs.find(x=>x.safe)||errs[0];errBox(e,got.length?errs.length:0)}
+  if(got.length){toast(got.length>1?'完成 {count} 张':'生成完成',null,{count:got.length});hist()}if(errs.length&&!opts.quick){const e=errs.find(x=>x.safe)||errs[0];errBox(e,got.length?errs.length:0)}
   if(warns.size){$('#wbWarn').hidden=false;warnings=[...warns];$('#wbWarn').textContent=warnings.map(key=>t(key)).join(' ')}}
- catch(e){if(e.name=='AbortError'){toast('已取消生成');if(got.length)hist()}else errBox(e)}
- finally{W.busy=null;busy(false)}}
+ catch(e){if(e.name=='AbortError'){toast('已取消生成');if(got.length)hist();if(opts.quick)errs.push(e)}else if(opts.quick)errs.push(e);else errBox(e)}
+ finally{W.busy=null;busy(false)}
+ return {got,errs,warns:[...warns]}}
 function errBox(e,count){
  lastError={e,count,providerId:cfg.prov};
  const el=$('#wbErr');el.hidden=false;el.classList.toggle('safe',!!e.safe);
@@ -1010,6 +1040,8 @@ function show(i,history=false){
  const R=$('#wbRes');R.hidden=W.results.length<2;
  R.innerHTML=W.results.map((x,j)=>`<button data-ri="${j}" class="${j==i?'on':''}"><img src="${U(x.after)}" alt=""></button>`).join('');
  resultText(r);
+ const stage=$('#wbStage'),area=stage.getBoundingClientRect();
+ if(area.bottom<0||area.top>innerHeight)stage.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 // 閲覧位置は作業画面の選択と別に持ちます。画像を送るだけでは作業中の結果を変更しません。
 const gallery = $('#wbGallery');
@@ -1192,12 +1224,15 @@ async function hist(){
  let L=[];
  try{L=(await tx('readonly',s=>s.getAll()))||[]}catch(e){}
  L.sort((a,b)=>b.t-a.t);hu.forEach(URL.revokeObjectURL);hu=[];
- $('#wbHist').innerHTML=L.length?L.map(r=>{
+ $('#wbHist').innerHTML=L.length?L.slice(0,30).map(r=>{
   const u=URL.createObjectURL(r.after);hu.push(u);
   return `<button data-t="${r.t}" aria-haspopup="dialog"><img src="${u}" alt=""><span></span><i data-del="${r.t}" aria-label="">×</i></button>`;
- }).join(''):`<p class="fine"></p>`;
+ }).join('')+(L.length>30?`<button class="hist-more" data-go="history"><b>${t('全部')}</b><small>${L.length} ↗</small></button>`:''):`<p class="fine"></p>`;
  $('#wbHistZip').disabled=!L.length;
  W.hist=L;historyText();
+ // 履歴ページが閉じている時は件数だけを更新し、全件の画像は開いた時に読み込みます。
+ $('#nHist').textContent=L.length||'';
+ if(A.st.tab=='history')window.HIS?.refresh();
 }
 function historyText(){
  if(!W.hist?.length){
@@ -1234,9 +1269,75 @@ $('#wbHist').onclick = async event => {
 };
 $('#wbHClr').onclick=async()=>{const all=W.hist||[];if(!all.length)return toast('还没有生成记录');await tx('readwrite',s=>s.clear());await hist();toast('已清空 {count} 条记录',async()=>{await tx('readwrite',s=>{all.forEach(r=>s.put(r))});hist()},{count:all.length})};
 // ---------- 对外 ----------
-let inited=false;async function init(){if(inited)return;inited=true;const gk=[].concat(g0.g||[]),pk=(g0.p||[]).filter(x=>Array.isArray(x));const need=[gk.length&&'costume',gk.some(k=>k[0]=='a')&&'anime',pk.length&&'pose'].filter(Boolean);if(need.length)await Promise.all(need.map(A.load)).catch(()=>{});
- if(!W.garments.length)W.garments=gk.filter(k=>A.ITEMS[k]).slice(0,1).map(k=>({kind:'lib',k}));if(!W.poses.length)W.poses=pk.filter(x=>A.ITEMS[x[0]]).slice(0,6).map(x=>({kind:'lib',k:x[0],ai:x[1]??A.ITEMS[x[0]].ai}));hist()}
-window.WB={async show(){await init();render()},async pick(it){await init();if(it.type=='pose'){if(!canPickPose())return toast(COMFY_POSE);if(!W.poses.some(p=>p.k==it.k)){if(W.poses.length>=6)W.poses.shift();W.poses.push({kind:'lib',k:it.k,ai:it.ai})}toast('已加入姿势参考（{count} 个）',null,{count:W.poses.length})}else if(it.type=='portrait'){await addPortrait(it)}else{W.garments=[{kind:'lib',k:it.k}];toast('已选为试穿服装')}A.setTab('studio')},_W:W,_cfg:cfg};
+let inited=false,initialization;
+function init(){
+ if(initialization)return initialization;
+ initialization=(async()=>{
+  const garments=[].concat(g0.g||[]),poses=(g0.p||[]).filter(Array.isArray),expressions=(g0.e||[]).filter(Array.isArray);
+  // 種類ごとに別の JSON があるので、トレイで選んだ服飾・深度ポーズも再読込します。
+  const types={c:'costume',a:'anime',y:'dyn',p:'pose',d:'depth',e:'expr'};
+  const keys=[...garments,...poses.map(([k])=>k),...expressions.map(([k])=>k)];
+  await Promise.allSettled([...new Set(keys.map(key=>types[key[0]]).filter(Boolean))].map(A.load));
+  W.garments=garments.filter(k=>A.ITEMS[k]).slice(0,2).map(k=>({kind:'lib',k}));
+  const restore=([k,ai])=>({kind:'lib',k,ai:ai??A.ITEMS[k].ai});
+  W.poses=poses.filter(([k])=>A.ITEMS[k]).slice(0,6).map(restore);
+  W.exprs=expressions.filter(([k])=>A.ITEMS[k]).slice(0,1).map(restore);
+  inited=true;hist();
+ })();
+ return initialization;
+}
+let selectionRevision=0,quickLanguage=W.pl;
+async function setSel(sel,lang=W.pl){
+ const revision=++selectionRevision;
+ await init();
+ const portrait=sel.portrait?.[0];
+ let person=portrait&&W.persons.find(p=>p.k===portrait.k);
+ // 人物画像の読込中に組み合わせを変えた場合は、最後の選択だけを反映します。
+ if(portrait&&!person){
+  const image=await toJpeg(portrait.m,1536);
+  if(revision!==selectionRevision)return '';
+  person={...image,url:URL.createObjectURL(image.blob),k:portrait.k};
+ }
+ if(revision!==selectionRevision)return '';
+ const fromLibrary=it=>({kind:'lib',k:it.k,ai:it.ai});
+ W.garments=(sel.garment||[]).slice(0,2).map(fromLibrary);
+ W.poses=(sel.pose||[]).slice(0,6).map(fromLibrary);
+ W.exprs=(sel.expr||[]).slice(0,1).map(fromLibrary);
+ W.persons=person?[person]:[];
+ W.dirty=false;render();
+ quickLanguage=lang;
+ return compose(undefined,lang);
+}
+// 履歴から戻すのは今回の入力だけです。接続やワークフロー、追加指示の設定は保ちます。
+async function restoreHistory(record){
+ await init();
+ let person;
+ if(record.before){
+  const url=URL.createObjectURL(record.before);
+  const image=await loadImg(url).catch(error=>{URL.revokeObjectURL(url);throw error});
+  person={blob:record.before,url,w:image.naturalWidth,h:image.naturalHeight};
+ }
+ W.mode=record.mode=='gen'?'gen':'tryon';
+ W.persons=person?[person]:[];
+ if(['en','ja','zh'].includes(record.promptLanguage))W.pl=record.promptLanguage;
+ W.dirty=false;
+ render();
+ // サービスに送る直前の自動変換を繰り返さないよう、元の編集文を優先します。
+ const prompt=record.orig||record.prompt;
+ if(prompt){
+  $('#wbPrompt').value=prompt;
+  W.dirty=true;
+  renderJapanesePreview();
+ }
+}
+window.WB={async show(){await init();render()},async pick(it){await init();if(it.type=='pose'){if(!canPickPose())return toast(COMFY_POSE);if(!W.poses.some(p=>p.k==it.k)){if(W.poses.length>=6)W.poses.shift();W.poses.push({kind:'lib',k:it.k,ai:it.ai})}toast('已加入姿势参考（{count} 个）',null,{count:W.poses.length})}else if(it.type=='portrait'){await addPortrait(it)}else if(it.type=='expr'){
+ if(isComfy())return toast('ComfyUI 工作流不支持表情参考。');
+ W.exprs=[{kind:'lib',k:it.k,ai:it.ai}];toast('已加入表情参考（只取神态）')
+ }else{W.garments=[{kind:'lib',k:it.k}];toast('已选为试穿服装')}A.setTab('studio')},_W:W,get _cfg(){return cfg},
+ // 履歴ページと作業台が、同じ IndexedDB の記録を読み書きします。
+ restoreHistory,db:{tx,save,hist:()=>tx('readonly',s=>s.getAll()),del:key=>tx('readwrite',s=>s.delete(key)),clear:()=>tx('readwrite',s=>s.clear()),put:r=>tx('readwrite',s=>s.put(r)),refreshHist:hist},
+ quick:opts=>run({...opts,quick:true}),cfgOpen,nice,busy:()=>!!W.busy,stop:()=>W.busy?.abort(),
+ isConfigured:()=>isComfy()?!!comfy.workflow:!!cfg.key,provLabel:()=>[provider(cfg.prov),isComfy()?cfg.name:modelOf()].filter(Boolean).join(' · '),setSel};
 // 言語変更で更新するのは表示だけです。入力、生成、履歴の再読み込みは行いません。
 addEventListener('uilocalechange',()=>{
  if(inited)render(true);

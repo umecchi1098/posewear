@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 def media_url(path, *, absolute=False):
   return urljoin(SITE + '/' if absolute else '/', path)
 
+WAT=os.environ.get('POSEWEAR_WA_TOKEN','').strip()  # Cloudflare Web Analytics 站点令牌（公开值，随页面下发）；设了才注入统计脚本并放行其 CSP 域名
 def TU(p): return p if p.startswith('http') else (AH+'/'+p if AH else '/'+p)  # 缩略图相对引用
 def TS(p): return p if p.startswith('http') else (AH+'/'+p if AH else SITE+'/'+p)  # 缩略图绝对引用（JSON-LD）
 h8=lambda b:hashlib.sha256(b if isinstance(b,bytes) else b.encode()).hexdigest()[:10]
@@ -18,7 +19,7 @@ def put(name,data):
 put('poses.json',PJ);put('costumes.json',CJ);put('anime.json',AJ);put('portraits.json',RJ);put('depths.json',DJ)
 # 翻訳辞書もキャッシュの版に含め、更新後に古い辞書が残らないようにします。
 ui_files=['ui.js','messages-common.js','messages-gallery.js','messages-studio.js']
-static_files=['style.css',*ui_files,'zip.js','extras.js','comfy.js','comfy-workflows.js','generation-settings.js','studio.js']
+static_files=['style.css',*ui_files,'zip.js','extras.js','comfy.js','comfy-workflows.js','generation-settings.js','studio.js','history.js']
 for f in static_files: put(f,open(f'src/{f}','rb').read())
 # フォントの内容が変わると CSS とキャッシュの URL も変わる。ライセンスも同じサイトで配信する。
 font_name='noto-sans-jp.woff2'
@@ -31,9 +32,13 @@ os.makedirs(f'{D}/workflows',exist_ok=True)
 for workflow in ['try-on-qwen-2509-api.json', 'posewear-qwen21-pose-api.json', 'posewear-qwen21-pose-no-pe-api.json']:
   shutil.copyfile(f'workflows/{workflow}',f'{D}/workflows/{workflow}')
 shutil.copyfile('docs/comfyui-windows.md',f'{D}/comfyui-windows.md')
+put('expressions.json',EXJ);put('hair.json',HAJ);put('dynasties.json',DYJ);put('scenes.json',SCJ);put('lights.json',LIJ);put('props.json',PRJ);put('furniture.json',FUJ)
 app=open('src/app.js').read()
 if AH: app=app.replace("const AH='';",f"const AH='{AH}/';")
-app=app.replace("'poses.json'","'/"+A['poses.json']+"'").replace("'costumes.json'","'/"+A['costumes.json']+"'").replace("'anime.json'","'/"+A['anime.json']+"'").replace("'portraits.json'","'/"+A['portraits.json']+"'").replace("'depths.json'","'/"+A['depths.json']+"'")
+# データ名だけを置き換え、アプリが今回生成したハッシュ付きファイルを読み込みます。
+for name, path in A.items():
+  if name.endswith('.json'):
+    app = app.replace("'" + name + "'", "'/" + path + "'")
 put('app.js',app)
 VER='posewear-v10-'+h8(''.join(A.values()))
 # 共有プレビューや検索結果にも、今回公開するフォーク自身のURLを使います。
@@ -41,6 +46,7 @@ idx=open('src/index.html').read().replace('__POSEWEAR_SITE__', H.escape(SITE, qu
 for f in [*static_files,'app.js']:
   idx=idx.replace(f'"{f}"',f'"/{A[f]}"')
 idx=idx.replace('href="poses.json"',f'href="/{A["poses.json"]}"')
+if WAT: idx=idx.replace('</body>',f'<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon=\'{{"token": "{WAT}"}}\'></script></body>')
 open(f'{D}/index.html','w').write(idx)
 for f in [*static_files,'app.js']:
   if os.path.exists(f'{D}/{f}'): os.remove(f'{D}/{f}')
@@ -100,11 +106,16 @@ def page(kind,it,rel):
 open(f'{D}/404.html','w').write(f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>页面不存在 | 衣姿 PoseWear</title><meta name="robots" content="noindex"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>{CSS}
 .nf{{max-width:480px;margin:12vh auto;text-align:center;padding:0 20px}}.nf b{{font-size:64px;color:#d81b3a;display:block;line-height:1}}</style></head><body><header><a href="/">{LOGO}衣姿 PoseWear</a></header>
 <div class="nf"><b>404</b><h1>这个页面不存在</h1><p class="mu">链接可能写错了，或者内容已经调整。</p><a class="go" href="/">回到首页</a><a class="go" style="background:#111" href="/#costume">看看服装库</a></div></body></html>''')
-_IMG=" ".join(["'self'","data:","blob:"]+list(DEPTH_ORIGINS)+[host for host in (AH, MEDIA_HOST) if host])
-CSP=("default-src 'self'; script-src 'self' "+SH+"; style-src 'self' 'unsafe-inline'; img-src "+_IMG+"; font-src 'self' data:; "
- f"connect-src 'self' data: blob: {MEDIA_HOST} https://api.openai.com https://generativelanguage.googleapis.com https://*.volces.com https://*.bytepluses.com https://oaidalleapiprodscus.blob.core.windows.net https://*.googleusercontent.com; "
+# 表示用の img と、試着で画像を読む fetch に同じ素材ホストを許可します。
+image_hosts = sorted(set(DEPTH_ORIGINS) | set(HOTLINK_ORIGINS) | {host for host in (AH, MEDIA_HOST) if host})
+_IMG = " ".join(["'self'", "data:", "blob:", *image_hosts])
+CSP=("default-src 'self'; script-src 'self' "+SH+(" https://static.cloudflareinsights.com" if WAT else "")+"; style-src 'self' 'unsafe-inline'; img-src "+_IMG+"; font-src 'self' data:; "
+ "connect-src 'self' data: blob: https://api.openai.com https://generativelanguage.googleapis.com https://*.volces.com https://*.bytepluses.com https://oaidalleapiprodscus.blob.core.windows.net https://*.googleusercontent.com"+(" "+" ".join(image_hosts))+(" https://cloudflareinsights.com" if WAT else "")+"; "
  "worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests")
 IMM='  Cache-Control: public, max-age=31536000, immutable\n'
+# Pages Functions 必须位于部署目录内才会随 wrangler pages deploy 一起发布（曾因只传静态产物导致 /api/proxy 丢失，见 issue #7）
+if os.path.isdir('functions'):
+  shutil.rmtree(f'{D}/functions',ignore_errors=True); shutil.copytree('functions',f'{D}/functions')
 open(f'{D}/_headers','w').write(f'''/*
   Content-Security-Policy: {CSP}
   X-Content-Type-Options: nosniff
@@ -118,6 +129,12 @@ open(f'{D}/_headers','w').write(f'''/*
 {IMM}/c/*
 {IMM}/a/*
 {IMM}/r/*
+{IMM}/e/*
+{IMM}/y/*
+{IMM}/s/*
+{IMM}/l/*
+{IMM}/t/*
+{IMM}/f/*
 {IMM}/o/*
 {IMM}/icon-*
   Cache-Control: public, max-age=86400

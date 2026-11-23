@@ -13,7 +13,7 @@ async function setup(prov,vp,dark){const c=await b.newContext({locale:'zh-CN',vi
   if(mode=='slow')await new Promise(r=>setTimeout(r,1500));
   const body=/generateContent/.test(u+(req.headers()['x-target-url']||''))?{candidates:[{content:{parts:[{text:'ok'},{inlineData:{mimeType:'image/png',data:img}}]}}]}:{data:[{b64_json:img}]};
   return route.fulfill({status:200,headers:H,body:JSON.stringify(body)})};
- await p.route(/api\.openai\.com|generativelanguage\.googleapis\.com|ark\.cn-beijing\.volces\.com|\/api\/proxy/,handler);
+ await p.route(/api\.openai\.com|generativelanguage\.googleapis\.com|ark\.cn-beijing\.volces\.com|relay\.example\.com|\/api\/proxy/,handler);
  await p.addInitScript(([prov,dark])=>{if(!sessionStorage.x){sessionStorage.x=1;localStorage.setItem('wbCfg',JSON.stringify({prov,key:'sk-test-123',base:prov=='custom'?'https://relay.example.com':'',model:'',field:'image[]',proto:'json',proxy:false}));localStorage.setItem('introX','1');if(dark)localStorage.setItem('theme','dark')}window.__TMO=3000},[prov,dark]);
  await p.goto(U+'/#studio');await p.waitForFunction(()=>window.WB&&window.APP,null,{timeout:15000});
  await p.setInputFiles('#wbFile',FX+'person.png');
@@ -23,7 +23,7 @@ const go=async(p)=>{await p.click('#wbGo');await p.waitForFunction(()=>!document
 const st=p=>p.evaluate(()=>({res:WB&&document.querySelector('#wbAfter').src.slice(0,5),err:document.querySelector('#wbErr').hidden?'':document.querySelector('#wbErr').innerText.replace(/\s+/g,' '),hist:document.querySelectorAll('#wbHist [data-t]').length,toast:(document.querySelector('#toast')||{}).innerText||''}));
 for(const prov of ['openai','gemini','seedream','custom']){hits=[];mode='ok';const {c,p}=await setup(prov);await go(p);let s=await st(p);R.push([prov+' success',s.res=='blob:'&&!s.err&&s.hist>=1,JSON.stringify(s)+' '+hits[0]]);
  if(prov=='gemini'||prov=='seedream'){for(const m of prov=='gemini'?['safe-gem','safe-gem2']:['safe-sd']){hits=[];mode=m;await go(p);const t=await p.$eval('#wbErr',e=>e.innerText);R.push([m,/安全审核/.test(t)&&hits.length==1&&!/检查 API 设置/.test(t),t.slice(0,80)+' hits '+hits.length])}mode='ok'}
- if(prov=='custom')R.push(['custom via proxy',hits.every(h=>/\/api\/proxy/.test(h)&&/relay\.example/.test(h)),hits[0]]);
+ if(prov=='custom')R.push(['custom direct when proxy off',hits.length>0&&hits.every(h=>{const u=h.split(' ')[1];return /relay\.example\.com/.test(u)&&!/api\/proxy/.test(u)}),hits[0]]);
  if(prov=='openai'){await p.screenshot({path:S+'d-result.png'});
   {await p.evaluate(()=>{document.querySelector('details.adv').open=true;const x=document.querySelector('#wbExtra');x.value='性感紧身露背比基尼，sexy tight backless bikini, emphasizing her curves';x.dispatchEvent(new Event('input',{bubbles:true}))});
    const on0=await p.$eval('#wbNeutral',e=>e.checked);mode='ok';bodies=[];await go(p);const bOn=bodies.join(' ');
@@ -63,7 +63,14 @@ await p.goto(U+'/');await p.waitForFunction(()=>APP.ITEMS&&Object.keys(APP.ITEMS
 // combo + long/extreme
 await p.goto(U+'/');await p.waitForFunction(()=>APP.ITEMS&&document.querySelector('.card'),null,{timeout:15000});
 await p.evaluate(()=>{const ks=Object.keys(APP.ITEMS).slice(0,12);ks.forEach(k=>APP.toggleSel(k));const c=document.querySelector('.card .info h3');if(c)c.textContent='超长标题测试'.repeat(20);document.querySelector('#nFav')&&(document.querySelector('#nFav').textContent='9999')});await p.waitForTimeout(500);await p.screenshot({path:S+'dark-combo.png'});
-const ov=await p.evaluate(()=>[...document.querySelectorAll('.card,.tray-h,#tray,.tabs')].filter(e=>e.scrollWidth>e.clientWidth+2).map(e=>e.className||e.id).slice(0,5));R.push(['no overflow',!ov.length,JSON.stringify(ov)]);
+const ov=await p.evaluate(()=>[...document.querySelectorAll('.card,.tray-h,#tray')].filter(e=>e.scrollWidth>e.clientWidth+2).map(e=>e.className||e.id).slice(0,5));R.push(['no overflow',!ov.length,JSON.stringify(ov)]);
+// 12種類の素材タブは横にスクロールでき、画面全体には横スクロールを作らないことを確認します。
+const navFits=await p.evaluate(()=>{
+ const tabs=document.querySelector('.tabs');
+ return document.documentElement.scrollWidth<=innerWidth+2 &&
+  (tabs.scrollWidth<=tabs.clientWidth+2 || ['auto','scroll'].includes(getComputedStyle(tabs).overflowX));
+});
+R.push(['scrollable navigation fits viewport',navFits,'']);
 const cb=await p.$eval('.cbtns button',e=>e.getBoundingClientRect().width);R.push(['card btn size',cb>=40,cb]);
 await c.close();await b.close();
-R.forEach(r=>console.log((r[1]?'PASS ':'FAIL ')+r[0]+' — '+r[2]));console.log('errors',errs);})();
+R.forEach(r=>console.log((r[1]?'PASS ':'FAIL ')+r[0]+' — '+r[2]));console.log('errors',errs);if(errs.length||R.some(r=>!r[1]))process.exitCode=1;})();

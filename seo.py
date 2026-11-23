@@ -21,7 +21,7 @@ RLEN={'短发':('short-hair','Short hair'),'中长发':('medium-hair','Medium ha
 COLS={'黑':'black','白':'white','红':'red','粉':'pink','蓝':'blue','藏青':'navy','棕':'brown','米':'beige','象牙白':'ivory','灰':'grey','绿':'green','黄':'yellow','紫':'purple','金':'gold','银':'silver','卡其':'khaki','酒红':'burgundy','橙':'orange','奶油':'cream','薄荷':'mint','薰衣草':'lavender','橄榄':'olive'}
 ITEMK={'连衣裙':'dress','半身裙':'skirt','短裤':'shorts','长裤':'trousers','牛仔裤':'jeans','大衣':'coat','夹克':'jacket','开衫':'cardigan','衬衫':'blouse','毛衣':'sweater','吊带':'camisole','泳衣':'swimsuit','靴子':'boots','高跟鞋':'high heels','运动鞋':'sneakers','凉鞋':'sandals','连裤袜':'tights','长筒袜':'stockings'}
 cz=lambda k:k if k.endswith('白') else k+'色'
-NA=sum(len(p['angles']) for p in poses.values());SP=[p for p in PL if not p.get('a')];NA_PUB=sum(len(p['angles']) for p in SP);SC=[c for c in cos if not c.get('a')];SA=[c for c in acs if not c.get('a')];SR=pors
+NA=sum(len(p['angles']) for p in poses.values());SP=[p for p in PL if not p.get('a')];NA_PUB=sum(len(p['angles']) for p in SP);SC=[c for c in cos if not c.get('a')];SA=[c for c in acs if not c.get('a') and not c.get('ext')];ANI_PUB=sum(1 for c in acs if not c.get('a'));SR=pors
 def ctags(c):
   w=' '+c['kw']+' ';e=' '+c['en'].replace(',',' ')+' '
   return [('item',z,ITEMK[z]) for z in ITEMK if ' '+ITEMK[z]+' ' in e]+[('col',z,COLS[z]) for z in COLS if ' '+COLS[z]+' ' in w]
@@ -214,7 +214,7 @@ body=f'''<div class="wrap"><h1>Pose, outfit and portrait references with prompts
 W('/en/',shell('en','/','PoseWear – Pose & Outfit Reference Library with AI Prompts and Online Try-On',en_desc,body,ENLD))
 add('pages','/',TODAY)
 # ---- 中文首页：标题、描述、真实数字、前 N 项静态卡片、JSON-LD、hreflang ----
-HC=dict(pose=len(SP),ang=NA_PUB,cos=len(SC),ani=len(SA),por=len(SR));HA=dict(pose=len(poses),ang=NA,cos=len(cos),ani=len(acs),por=len(pors))  # 首页计数唯一来源；改公开数：HC=dict(pose=len(SP),ang=NA_PUB,cos=len(SC),por=len(SR))
+HC=dict(pose=len(SP),ang=NA_PUB,cos=len(SC),ani=ANI_PUB,por=len(SR));HA=dict(pose=len(poses),ang=NA,cos=len(cos),ani=len(acs),por=len(pors))  # 首页计数唯一来源；改公开数：HC=dict(pose=len(SP),ang=NA_PUB,cos=len(SC),por=len(SR))
 zh_desc=f"衣姿 PoseWear：{HC['pose']} 组姿势（{HC['ang']:,} 张角度图）、{HC['cos']:,} 套服装、{HC['ani']:,} 套动画服装、{HC['por']:,} 张人像参考图，附中文、英文和日文提示词，可上传照片在线 AI 试穿。免费，无需注册。"
 zhttl='衣姿 PoseWear · 姿势、服装、人像参考图库 | 中文、英文和日文提示词 + 在线 AI 试穿'
 idx=open(f'{D}/index.html').read()

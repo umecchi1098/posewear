@@ -49,7 +49,7 @@ const HOT={pose:['站姿','坐姿','回头','可爱','躺卧','跪立','俯拍',
 // 履歴は既存形式の文字列で保存し、既知の候補だけ現在のUI言語で表示する。
 const knownHot=new Set([...Object.values(HOT).flat(),...Object.values(A.suggestions).flat()]);
 const q=$('#q'),sg=document.createElement('div');sg.id='qsug';sg.hidden=true;q.parentNode.append(sg);
-function sgDraw(){const h=LS('qh')||[],v=q.value.trim(),tab=['costume','anime','portrait','depth'].includes(A.st.tab)?A.st.tab:'pose',hot=(HOT[tab]||[]).filter(x=>!v||x.includes(v)||tr(x).toLowerCase().includes(v.toLowerCase()));
+function sgDraw(){const h=LS('qh')||[],v=q.value.trim(),tab=A.st.tab,hot=(HOT[tab]||A.suggestions[tab]||HOT.pose).filter(x=>!v||x.includes(v)||tr(x).toLowerCase().includes(v.toLowerCase()));
  sg.innerHTML=(h.length&&!v?`<div class="sgh"><small>${txl('最近搜索')}</small><button data-clr>${txl('清除')}</button></div><div class="sgc">${h.map(x=>`<button data-q="${A.esc(x)}">${knownHot.has(x)?txl(x):A.esc(x)}</button>`).join('')}</div>`:'')+(hot.length?`<div class="sgh"><small>${txl('热门')}</small></div><div class="sgc">${hot.map((x,i)=>`<button data-hot="${A.esc(x)}"><em>${i+1}</em>${txl(x)}</button>`).join('')}</div>`:'');sg.hidden=!sg.innerHTML}
 const saveQ=()=>{const v=A.st.suggestion||q.value.trim();if(v.length<1)return;SV('qh',[v,...(LS('qh')||[]).filter(x=>x!=v)].slice(0,8))};
 q.addEventListener('focus',sgDraw);q.addEventListener('input',()=>{sgDraw();clearTimeout(q._h);q._h=setTimeout(saveQ,1500)});q.addEventListener('keydown',e=>{if(e.key=='Enter'){saveQ();sg.hidden=true;q.blur()}});
@@ -57,7 +57,8 @@ q.addEventListener('blur',()=>setTimeout(()=>{sg.hidden=true},150));
 sg.addEventListener('mousedown',e=>e.preventDefault());sg.onclick=async e=>{
  const b=e.target.closest('button');if(!b)return;
  if(b.dataset.clr!=null){SV('qh',[]);return sgDraw()}
- if(!['pose','costume','anime','portrait','depth'].includes(A.st.tab))await A.setTab('pose');
+ // 拡張ライブラリの候補も、その素材を見ているタブ内で絞り込みます。
+ if(!A.suggestions[A.st.tab]?.length)await A.setTab('pose');
  if(b.dataset.hot||knownHot.has(b.dataset.q))A.searchSuggestion(b.dataset.hot||b.dataset.q);else{q.value=b.dataset.q;q.dispatchEvent(new Event('input'))}
  saveQ();sg.hidden=true;q.blur();
 };

@@ -13,8 +13,8 @@ window.UI = (() => {
     // 保存領域が無効なブラウザでは、このページを開いている間だけ設定を使います。
   }
 
-  function t(source, values = {}) {
-    const translated = locale === 'zh' ? source : messages.get(source)?.[locale === 'en' ? 0 : 1] ?? source;
+  function t(source, values = {}, language = locale) {
+    const translated = language === 'zh' ? source : messages.get(source)?.[language === 'en' ? 0 : 1] ?? source;
     return translated.replace(/\{(\w+)\}/g, (original, key) => Object.hasOwn(values, key) ? values[key] : original);
   }
 
