@@ -191,11 +191,29 @@ async function browse(page) {
   await locale(page, 'zh');
   assert.equal(await text(page, '#trayText'), combination);
   await page.reload();
+  // 再読込後は選択件数をボタンで確認し、パネルを開いて保存した内容を確認します。
+  await visible(page, '#trayFab');
+  assert.equal(await text(page, '#trayFabN'), '1');
+  await page.click('#trayFab');
   await visible(page, '#trayText');
   assert.equal(await text(page, '#trayText'), combination);
   assert.match(await page.locator('[data-tl=en]').getAttribute('class'), /\bon\b/);
   await page.click('#trayClear');
+  await visible(page, '#tgEmpty');
+  await page.click('#trayMin');
   await locale(page, 'ja');
+  // 空のパネルから開いた選択画面でも、日本語のまま複数のポーズを選べます。
+  await page.getByRole('button', { name: '画像生成パネルを開く' }).click();
+  assert.match(await text(page, '#tgEmpty'), /素材を選ぶ/);
+  await page.click('#tgAddRow [data-add=pose]');
+  assert.equal(await text(page, '#pkT'), 'ポーズ集');
+  const options = page.locator('#pkG [data-k]');
+  await options.nth(0).click();
+  await options.nth(1).click();
+  await page.locator('#pk').getByRole('button', { name: '完了', exact: true }).click();
+  assert.equal(await page.locator('#trayItems > div').count(), 2);
+  await page.click('#trayClear');
+  await page.click('#trayMin');
   const poseKey = await pose.getAttribute('data-k');
   await pose.locator('[data-a=ang][data-i="1"]').click();
   await page.click('#batchBtn');
@@ -314,6 +332,8 @@ async function localizedMaterials(page) {
   await page.click('#trayCopy');
   assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),combination);
   await page.click('#trayClear');
+  await visible(page, '#tgEmpty');
+  await page.click('#trayMin');
   await page.click('#batchBtn');
   await match.locator('.phk').click();
   await page.click('#bbar [data-b=cp]');

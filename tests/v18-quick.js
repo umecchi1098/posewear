@@ -3,7 +3,12 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
 (async () => {
   const U = process.env.U || 'http://localhost:8787'; const b = await chromium.launch({ executablePath: process.env.CHROME_PATH }); const R = [], errs = [];
   const P = [fs.readFileSync(FX + 'mk1.png').toString('base64'), fs.readFileSync(FX + 'mk2.png').toString('base64')]; let mode = 'ok', cnt = 0, hits = [];
+  const sentImages = [];
   const handler = async (route) => { const req = route.request(); const u = req.url(); if (req.method() == 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' } });
+    // モックが実際に受け取った JPEG の内容で、どの素材が送信されたかを比較します。
+    const form = await new Response(req.postDataBuffer(), { headers: { 'content-type': req.headers()['content-type'] } }).formData();
+    const images = await Promise.all(form.getAll('image[]').map(async file => Buffer.from(await file.arrayBuffer())));
+    sentImages.push(images);
     hits.push(u); const H = { 'content-type': 'application/json', 'access-control-allow-origin': '*' };
     if (mode == '500') return route.fulfill({ status: 500, headers: H, body: '{"error":{"message":"internal"}}' });
     return route.fulfill({ status: 200, headers: H, body: JSON.stringify({ data: [{ b64_json: P[(cnt++) % 2] }] }) }) };
@@ -41,6 +46,45 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     await sel(p, 'costume');
     await p.click('#tgGo'); await p.waitForTimeout(600);
     R.push(['nokey opens cfg', await p.$eval('#cfg', e => !e.hidden), '']);
+    await c.close() }
+  // —— 常驻工作台：空选时入口在位，开面板经选择器加素材
+  { const { c, p } = await setup(true);
+    await p.waitForFunction(() => !document.querySelector('#trayFab').hidden, null, { timeout: 15000 }).catch(() => {});
+    R.push(['fab visible when empty', await p.$eval('#trayFab', e => !e.hidden) && await p.$eval('#tray', e => e.hidden), '']);
+    R.push(['no jianyi naming', !(await p.evaluate(() => document.body.innerText.includes('简易生图'))), '']);
+    await p.click('#trayFab'); await p.waitForTimeout(300);
+    R.push(['fab opens empty tray', await p.$eval('#tray', e => !e.hidden) && await p.$eval('#tgEmpty', e => !e.hidden), '']);
+    await p.click('[data-add="costume"]'); await p.waitForSelector('#pkG [data-k]', { timeout: 15000 });
+    await p.click('#pkG [data-k]'); await p.waitForTimeout(300);
+    await p.click('#pkDone'); await p.waitForTimeout(400);
+    const n1 = await p.$$eval('#trayItems > div', es => es.length);
+    R.push(['picker adds to tray', n1 == 1, 'items ' + n1]);
+    await p.waitForFunction(() => document.querySelector('#tgPrompt').value.length > 30, null, { timeout: 15000 }).catch(() => {});
+    R.push(['prompt after picker add', (await p.$eval('#tgPrompt', e => e.value)).length > 30, '']);
+    // トレイには衣装だけを置き、1回目に送信した画像を比較の基準にします。
+    await p.click('#tgGo');
+    await p.waitForFunction(() => !document.querySelector('#tgGo').disabled && document.querySelector('#tgRes [data-tg]'));
+    const initialImages = sentImages.at(-1);
+    await p.click('#tgStudio');
+    await p.setInputFiles('#wbFile', path.join(FX, 'person.png'));
+    await p.setInputFiles('#wbGFile', path.join(FX, 'mk2.png'));
+    await p.waitForFunction(() => WB._W.persons.length === 1 && WB._W.garments[0]?.kind === 'file');
+    // 実際のフォーム操作で参照画像と手編集文を入れたまま、同じトレイに戻ります。
+    await p.locator('details').filter({has:p.locator('#wbPrompt')}).evaluate(el => el.open = true);
+    await p.fill('#wbPrompt', 'private studio draft');
+    await p.evaluate(() => APP.setTab('costume'));
+    if (await p.locator('#tray').isHidden()) await p.click('#trayFab');
+    await p.click('#tgGo');
+    await p.waitForFunction(() => !document.querySelector('#tgGo').disabled);
+    const repeatImages = sentImages.at(-1);
+    R.push(['quick generation sends only the selected tray image', initialImages.length === 1 && repeatImages.length === 1
+      && initialImages[0].equals(repeatImages[0]), 'references ' + repeatImages.length]);
+    const records = await p.evaluate(async () => (await WB.db.hist()).map(record => [record.mode, !!record.before, record.prompt]));
+    R.push(['quick history excludes private studio inputs', records.length === 2 && records.every(([mode,before,prompt]) =>
+      mode === 'gen' && !before && !prompt.includes('private studio draft')), 'records ' + records.length]);
+    const retained = await p.evaluate(() => WB._W.persons.length === 1 && WB._W.garments[0]?.kind === 'file'
+      && WB._W.dirty && document.querySelector('#wbPrompt').value === 'private studio draft');
+    R.push(['studio draft retained after quick generation', retained, '']);
     await c.close() }
   R.push(['no pageerror', !errs.length, errs.slice(0, 3).join(' | ')]);
   let f = 0; for (const [n, ok, d] of R) { console.log((ok ? 'PASS' : 'FAIL') + ' ' + n + (ok ? '' : ' :: ' + d)); if (!ok) f++ }

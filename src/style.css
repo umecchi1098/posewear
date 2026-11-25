@@ -100,11 +100,10 @@ body.histview .bar,body.histview .filters,body.histview #grid,body.histview #emp
 /* tray */
 #tray{position:fixed;right:24px;bottom:24px;z-index:35;width:400px;background:var(--bg2);box-shadow:var(--sh3);border-radius:20px;animation:rise .4s var(--out);overflow:hidden}
 .tray-h{display:flex;align-items:center;gap:10px;padding:12px 12px 12px 20px}.tray-h b{font-size:15px;white-space:nowrap}.tray-h small{color:var(--mu);font-size:12px}
-#tray.min .tray-b{display:none}
 .tray-b{padding:0 20px 18px}.tray-items{display:flex;gap:8px;overflow-x:auto;padding:6px 6px 4px 0}
 .tray-items div{position:relative;flex:none}.tray-items img{width:52px;height:68px;object-fit:cover;border-radius:10px;background:var(--ph);display:block}
 .tray-items em{position:absolute;left:0;right:0;bottom:0;font-size:10px;font-style:normal;text-align:center;background:rgba(0,0,0,.5);color:#fff;border-radius:0 0 10px 10px}
-.tray-items b{position:absolute;right:-5px;top:-5px;width:18px;height:18px;border-radius:50%;background:var(--tx);color:var(--bg);font-size:12px;display:grid;place-items:center;cursor:pointer}
+.tray-items [data-k]{padding:0;position:absolute;right:-5px;top:-5px;width:18px;height:18px;border-radius:50%;background:var(--tx);color:var(--bg);font-size:12px;display:grid;place-items:center;cursor:pointer}
 #trayText{white-space:pre-wrap;font:13px/1.7 var(--sans);color:var(--tx2);max-height:130px;overflow:auto;margin:12px 0;padding:12px 14px;background:var(--sf);border-radius:12px}
 .tray-act{display:flex;gap:8px}.tray-act .pri{flex:1}
 body.tray .foot{padding-bottom:300px}
@@ -446,7 +445,7 @@ button:active:not(:disabled){transform:scale(.96)}
 body.batch .card .ph{cursor:copy}body.batch .card .ph::after{content:"";position:absolute;top:10px;left:10px;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.18);box-shadow:0 1px 4px rgba(0,0,0,.2);transition:transform .25s cubic-bezier(.16,1,.3,1),background .2s;z-index:3}
 body.batch .card.picked .ph::after{background:var(--ac) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 12 4 4 8-8'/%3E%3C/svg%3E") center/14px no-repeat;border-color:var(--ac);transform:scale(1.1)}
 body.batch .card .ph img{transition:transform .3s cubic-bezier(.16,1,.3,1)}body.batch .card.picked .ph img{transform:scale(.94)}body.batch .card.picked .ph{box-shadow:0 0 0 3px var(--ac)}
-body.batch .cbtns,body.batch .try,body.batch #tray{display:none!important}
+body.batch .cbtns,body.batch .try,body.batch #tray,body.batch #trayFab{display:none!important}
 #bbar{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;display:flex;gap:6px;align-items:center;background:#111;color:#fff;padding:8px 8px 8px 18px;border-radius:999px;box-shadow:0 12px 40px rgba(0,0,0,.25);animation:bup .45s cubic-bezier(.16,1,.3,1)}
 #bbar b{font-size:13.5px;margin-right:8px;font-variant-numeric:tabular-nums;white-space:nowrap}#bbar button{background:rgba(255,255,255,.1);color:#fff;border:0;border-radius:999px;padding:8px 14px;font-size:13px;white-space:nowrap}#bbar button:hover:not(:disabled){background:rgba(255,255,255,.2)}#bbar button:disabled{opacity:.4}#bbar button.pri{background:var(--ac)}
 @keyframes bup{from{opacity:0;transform:translate(-50%,24px)}}
@@ -779,3 +778,15 @@ body:has(#cfg:not([hidden])) #toast{bottom:calc(84px + env(safe-area-inset-botto
  #cfg:has(#cfProfileSection:not([hidden])) .cfg-b{display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);align-items:start;gap:24px}
  #cfg .settings-section + .settings-section{border-top:0;border-left:1px solid var(--line);margin:0;padding:0 0 0 20px}
 }
+
+/* ギャラリー右下のボタンからパネルを開き、ここで使う素材を選べます。 */
+#trayFab{position:fixed;right:24px;bottom:calc(24px + env(safe-area-inset-bottom));z-index:36;display:flex;align-items:center;gap:8px;font:600 13.5px var(--sans);color:var(--tx);background:var(--bg2);border:1px solid var(--line2);border-radius:999px;padding:11px 16px;box-shadow:var(--sh3);cursor:pointer}
+#trayFab:hover{border-color:var(--ac);color:var(--ac)}
+#trayFab em{font-style:normal;background:var(--ac);color:#fff;font-size:11.5px;font-weight:700;min-width:20px;height:20px;border-radius:999px;display:grid;place-items:center;padding:0 5px}
+#trayFab[hidden]{display:none}
+@media(max-width:760px){#trayFab{right:8px;bottom:calc(8px + env(safe-area-inset-bottom))}}
+.tg-add{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.tg-add span{font-size:12.5px;color:var(--mu);margin-right:2px}
+.tg-add button{font:12.5px var(--sans);color:var(--tx);background:var(--sf);border:1px solid var(--line2);border-radius:999px;padding:6px 11px;cursor:pointer}
+.tg-add button:hover{border-color:var(--ac);color:var(--ac)}
+.tg-empty{font-size:13px;line-height:1.7;color:var(--tx2);background:var(--sf);border-radius:12px;padding:12px 14px;margin:0 0 12px}

@@ -148,17 +148,41 @@ function combo(lang){const its=st.sel.map(k=>ITEMS[k]).filter(Boolean),p=its.fil
   return parts.map(part => part.replace(/。$/, '')).join('。') + '。';
  }
  return['杰作，最佳画质，一位女性',...r.map(i=>'人物：'+i.len+(i.st?'，'+i.st:'')),...c.map(i=>i.zh.replace(/。$/,'')),...h.map(i=>'发型：'+i.ti),...e.map(i=>'神态：'+i.zh),...p.map(i=>'摆出「'+prompt(i,'zh')+'」的姿势'),...d.map(i=>'深度姿势参考：'+prompt(i,'zh')),...s.map(i=>'场景：'+prompt(i,'zh')),...l.map(i=>'光线：'+prompt(i,'zh')),...objects.map(i=>prompt(i,'zh'))].join('；')+'。'}
-function tray(added){const n=st.sel.length;if(st.tab=='studio'||st.tab=='history'){$('#tray').hidden=true;document.body.classList.remove('tray');return}$('#tray').hidden=!n;document.body.classList.toggle('tray',n>0);if(!n)return;if(added&&innerWidth>760)$('#tray').classList.remove('min');if(added&&innerWidth<=760&&n==1)$('#tray').classList.add('min');$('#trayMin').textContent=tr($('#tray').classList.contains('min')?'展开':'收起');
+// ギャラリーでは選択がゼロでも入り口を表示し、作業台・履歴では両方を隠します。
+let trayOpen = false;
+function tray(added) {
+ const n = st.sel.length;
+ const gallery = st.tab !== 'studio' && st.tab !== 'history';
+ if (added) trayOpen = true;
+ const open = gallery && trayOpen;
+ $('#tray').hidden = !open;
+ $('#trayFab').hidden = !gallery || open;
+ $('#trayFab').setAttribute('aria-expanded', String(open));
+ $('#trayFabN').textContent = n;
+ $('#trayFabN').hidden = !n;
+ document.body.classList.toggle('tray', open);
+ if (!open) return;
+ $('#tgEmpty').hidden = n > 0;
+ $('#trayComboBox').hidden = !n;
  const UN={pose:'个姿势',depth:'个深度姿势',costume:'套服装',anime:'套服装',portrait:'个人像',expr:'个表情',hair:'款发型',dyn:'套历代服饰',scene:'个场景',light:'种光影',prop:'件道具',furn:'件家具'},tc={};st.sel.forEach(k=>{const it=ITEMS[k];if(it)tc[it.type]=(tc[it.type]||0)+1});$('#trayN').textContent=Object.entries(tc).map(([t,m])=>tr('{count} '+UN[t],{count:m})).join(' · ');
  $$('[data-tl]').forEach(button => {
   const selected = button.dataset.tl === st.tl;
   button.classList.toggle('on',selected);
   button.setAttribute('aria-pressed',String(selected));
  });
- $('#trayItems').innerHTML=st.sel.map(k=>ITEMS[k]?`<div><img src="${esc(thumb(ITEMS[k]))}"${ITEMS[k].ref?` referrerpolicy="${esc(ITEMS[k].ref)}"`:''} alt="${esc(title(ITEMS[k]))}"><em>${txl(TL(ITEMS[k]))}</em><b data-k="${k}" title="${txl('移除')}" role="button" aria-label="${txl('移除')}">×</b></div>`:'').join('');$('#trayText').lang=promptLanguages[st.tl].tag;$('#trayText').textContent=combo(st.tl);tgSync()}
+ $('#trayItems').innerHTML=st.sel.map(k=>ITEMS[k]?`<div><img src="${esc(thumb(ITEMS[k]))}"${ITEMS[k].ref?` referrerpolicy="${esc(ITEMS[k].ref)}"`:''} alt="${esc(title(ITEMS[k]))}"><em>${txl(TL(ITEMS[k]))}</em><button type="button" data-k="${esc(k)}" title="${txl('移除')}" aria-label="${txl('移除')} ${esc(title(ITEMS[k]))}">×</button></div>`:'').join('');$('#trayText').lang=promptLanguages[st.tl].tag;$('#trayText').textContent=combo(st.tl);tgSync()}
 $('#trayItems').onclick=e=>{const k=e.target.dataset.k;k&&toggleSel(k)};$('#trayCopy').onclick=()=>copy(combo(st.tl),promptLanguages[st.tl].label);
 $$('[data-tl]').forEach(b=>b.onclick=()=>{st.tl=b.dataset.tl;SV('tl',st.tl);tray()});
-$('#trayMin').onclick=()=>{const m=$('#tray').classList.toggle('min');$('#trayMin').textContent=tr(m?'展开':'收起')};
+// 開閉にキーボードを使っても、対応するボタンへフォーカスを引き継ぎます。
+$('#trayMin').onclick = () => { trayOpen = false; tray(); $('#trayFab').focus(); };
+$('#trayFab').onclick = () => { trayOpen = true; tray(); $('#trayMin').focus(); };
+$('#tgAddRow').onclick = event => {
+ const button = event.target.closest('[data-add]');
+ if (button && window.WB) WB.openPicker(button.dataset.add, {
+  keys: () => st.sel.slice(),
+  toggle: key => { toggleSel(key); return st.sel.includes(key); }
+ });
+};
 $('#trayClear').onclick=()=>{const s=st.sel;st.sel=[];SV('sel',[]);s.forEach(refreshCard);tray();toast('已清空组合')};
 // —— 托盘简易生图：组合直接同步到试穿台选材，在托盘内生成
 const TG_SLOT={portrait:'portrait',costume:'garment',anime:'garment',dyn:'garment',pose:'pose',depth:'pose',expr:'expr'};
@@ -168,7 +192,13 @@ function tgGroups(){const g={portrait:[],garment:[],pose:[],expr:[]},extra=[];st
 let tgPending = Promise.resolve(true);
 function tgSync() {
  $('#tgProv').textContent = window.WB && WB.isConfigured() ? WB.provLabel() : tr('未配置 API');
- if (!window.WB || !st.sel.length) return Promise.resolve(false);
+ // 最後の素材を外した直後は、読み込み待ちの古い結果も取り消します。
+ if (!st.sel.length) {
+  tgSig = '';
+  $('#tgPrompt').value = '';
+  return Promise.resolve(false);
+ }
+ if (!window.WB) return Promise.resolve(false);
  const language = st.tl;
  const signature = JSON.stringify([language, st.sel, st.sel.map(k => ITEMS[k]?.ai)]);
  if (signature === tgSig) return tgPending;
@@ -295,8 +325,8 @@ function selectTab(tab) {
  moveInd();
  $('.tabs button.on')?.scrollIntoView({block:'nearest',inline:'nearest'});
 }
-async function setTab(t,openId){$('#porNote').hidden=t!='portrait';$('#depthNote').hidden=t!='depth';paintSource(t);document.body.classList.toggle('depth',t=='depth');if(t=='studio'){st.tab=t;selectTab(t);drawHeader();history.replaceState(null,'','#studio');document.body.classList.add('studio');document.body.classList.remove('histview');$('#studio').hidden=false;$('#histSec').hidden=true;$('#tray').hidden=true;scrollTo({top:0});window.WB&&WB.show();return}
- if(t=='history'){st.tab=t;selectTab(t);drawHeader();history.replaceState(null,'','#history');document.body.classList.remove('studio');document.body.classList.add('histview');$('#studio').hidden=true;$('#histSec').hidden=false;$('#tray').hidden=true;scrollTo({top:0});window.HIS&&HIS.show();return}
+async function setTab(t,openId){$('#porNote').hidden=t!='portrait';$('#depthNote').hidden=t!='depth';paintSource(t);document.body.classList.toggle('depth',t=='depth');if(t=='studio'){st.tab=t;selectTab(t);drawHeader();history.replaceState(null,'','#studio');document.body.classList.add('studio');document.body.classList.remove('histview');$('#studio').hidden=false;$('#histSec').hidden=true;tray();scrollTo({top:0});window.WB&&WB.show();return}
+ if(t=='history'){st.tab=t;selectTab(t);drawHeader();history.replaceState(null,'','#history');document.body.classList.remove('studio');document.body.classList.add('histview');$('#studio').hidden=true;$('#histSec').hidden=false;tray();scrollTo({top:0});window.HIS&&HIS.show();return}
  if(document.body.classList.contains('studio')){document.body.classList.remove('studio');$('#studio').hidden=true}
  if(document.body.classList.contains('histview')){document.body.classList.remove('histview');$('#histSec').hidden=true}
  const changed=st.tab!=t;st.tab=t;tray();if(changed)grid.classList.add('gbusy');clearTimeout(qt);st.f={};st.q='';st.qAliases=[];$('#q').value='';st.suggestion='';$('#qx').hidden=true;

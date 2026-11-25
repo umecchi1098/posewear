@@ -130,8 +130,8 @@ function compose(poseSet,lang=W.pl){const en=lang=='en',P=W.persons.length,G=W.g
  if(P&&W.keepBody)L.push(bodyInstructions[lang]);
  return L.join('\n')}
 // 個別生成では各画像に渡す線画が1枚ずつ変わります。確認用の訳も送信時と同じ分け方にします。
-function poseSets(){
- return W.poses.length>1&&(isComfy()||W.bm=='each')?W.poses.map(p=>[p]):[W.poses];
+function poseSets(poses=W.poses){
+ return poses.length>1&&(isComfy()||W.bm=='each')?poses.map(p=>[p]):[poses];
 }
 function renderJapanesePreview(){
  const preview=$('#wbJaPreview'),output=$('#wbJaText');
@@ -139,7 +139,7 @@ function renderJapanesePreview(){
  if(preview.hidden||!preview.open){output.value='';return}
  const sets=poseSets();
  output.value=sets.map((set,i)=>(sets.length>1?`【ポーズ${i+1}】\n`:'')+compose(set,'ja')).join('\n\n');
- $('#wbJaNeutral').hidden=isComfy()||!neutralOn()||sets.every(isAdultJob);
+ $('#wbJaNeutral').hidden=isComfy()||!neutralOn()||sets.every(set=>isAdultJob(set));
 }
 let bodyInstructionActive=false;
 function reprompt(force){
@@ -372,22 +372,38 @@ chatImages.onclick=async event=>{
  }
 };
 // ---------- 选择器 ----------
-let pkType='costume',pkSelected=false;
+let pkType='costume',pkSelected=false,pkSink=null;
 function pickerTitle(){
  $('#pkT').textContent=pkType=='pose'&&pkSelected?t('选姿势（{count}/6）',{count:W.poses.length}):
-  t({pose:'选择姿势（可多选，最多 6 个）',portrait:'选择人像（作为人物 / 脸部参考）',expr:'选择表情（只迁移神态，不换脸）',anime:'选择动画服装',costume:'选择服装'}[pkType]);
+  t({pose:pkSink?'姿势库':'选择姿势（可多选，最多 6 个）',portrait:'选择人像（作为人物 / 脸部参考）',expr:'选择表情（只迁移神态，不换脸）',anime:'选择动画服装',costume:'选择服装'}[pkType]);
 }
-async function picker(type){if(type=='pose'&&!canPickPose())return toast(COMFY_POSE);pkType=type;pkSelected=false;pickerTitle();$('#pkDone').hidden=type!='pose';$('#pk').hidden=false;document.body.style.overflow='hidden';$('#pkQ').value='';$('#pkG').innerHTML='<div class="skel"></div>'.repeat(12);await A.load(type);drawPk();setTimeout(()=>$('#pkQ').focus(),50)}
+// トレイでは選択先を受け取り、試着画面では従来どおりワークフローの制限を適用します。
+async function picker(type,sink=null){
+ if(!sink&&type=='pose'&&!canPickPose())return toast(COMFY_POSE);
+ pkType=type;pkSink=sink;pkSelected=false;
+ pickerTitle();$('#pkDone').hidden=!sink&&type!='pose';$('#pk').hidden=false;
+ document.body.style.overflow='hidden';$('#pkQ').value='';
+ $('#pkG').innerHTML='<div class="skel"></div>'.repeat(12);
+ await A.load(type);
+ if($('#pk').hidden||pkType!==type)return;
+ drawPk();$('#pkQ').focus();
+}
 function drawPk(){
  const q=$('#pkQ').value.toLowerCase().trim().split(/\s+/).filter(Boolean);
  const L=A.DATA[pkType].filter(A.ok).filter(it=>{
   // ギャラリーを開かず直接試着を使った場合も、各言語のタイトルで検索できます。
   const words=it._s||[it.id,it.titleJa,it.titleEn,it.ja,it.ti,it.zh,it.en,it.cat,it.line].join(' ').toLowerCase();
   return q.every(word=>words.includes(word));
- }).slice(0,150),sel=new Set(W.poses.map(p=>p.k));
+ }).slice(0,150),sel=new Set(pkSink?pkSink.keys():W.poses.map(p=>p.k));
  $('#pkG').innerHTML=L.length?L.map(it=>`<button data-k="${it.k}" class="${pkType} ${sel.has(it.k)?'on':''}" title="${esc(A.title(it))}"><img loading="lazy" src="${A.thumb(it)}" alt="${esc(A.title(it))}"><span>${esc(A.title(it))}</span></button>`).join(''):`<p class="fine">${t('没有匹配的结果')}</p>`}
-let pq;$('#pkQ').oninput=()=>{clearTimeout(pq);pq=setTimeout(drawPk,150)};const pkClose=()=>{$('#pk').hidden=true;document.body.style.overflow='';render()};$('#pkX').onclick=pkClose;$('#pkDone').onclick=pkClose;
+let pq;$('#pkQ').oninput=()=>{clearTimeout(pq);pq=setTimeout(drawPk,150)};const pkClose=()=>{
+ clearTimeout(pq);$('#pk').hidden=true;document.body.style.overflow='';
+ if(!pkSink)render();
+ pkSink=null;
+};$('#pkX').onclick=pkClose;$('#pkDone').onclick=pkClose;
 $('#pk').onclick=e=>{if(e.target.id=='pk')return pkClose();const b=e.target.closest('[data-k]');if(!b)return;const k=b.dataset.k;
+ // トレイの素材は種類を問わず複数選択できます。選択の保存と表示はトレイ側が担当します。
+ if(pkSink){b.classList.toggle('on',pkSink.toggle(k));return}
  if(pkType=='pose'){const i=W.poses.findIndex(p=>p.k==k);if(i>=0)W.poses.splice(i,1);else if(W.poses.length>=6)return toast('最多选择 6 个姿势');else W.poses.push({kind:'lib',k,ai:A.ITEMS[k].ai});b.classList.toggle('on',i<0);pkSelected=true;pickerTitle()}
  else if(pkType=='expr'){W.exprs=[{kind:'lib',k,ai:A.ITEMS[k].ai}];pkClose()}
  else if(pkType=='portrait'){pkClose();addPortrait(A.ITEMS[k])}
@@ -409,7 +425,7 @@ const NEUTRAL=[
 const FRAME={ja:'衣料品の通販カタログ用に、プロの試着写真を撮る。成人のモデルが参照画像と同じデザイン、色、裁断の衣服を着用し、衣服を足したり取り除いたりしない。本人の顔立ちを保ち、落ち着いたスタジオや日常の場面で、自然でリラックスしたポーズを取る。',en:'Professional e-commerce fashion try-on photo for a clothing catalog. The subject is an adult, fully clothed in exactly the reference garments (same design, color and cut, nothing added or removed), keeping the same identity, in a natural, relaxed, non-suggestive pose, in a tasteful studio or lifestyle setting.',
  zh:'服装电商的专业试穿照片，用于商品目录。人物是成年人，完整穿着参考图中的服装（款式、颜色、剪裁完全一致，不增不减），保持同一人的长相，姿势自然放松，场景为简洁的影棚或生活场景。'};
 const neutralOn=()=>LS('wbNeutral')!==false;$('#wbNeutral').checked=neutralOn();$('#wbNeutral').onchange=e=>{SV('wbNeutral',e.target.checked);renderJapanesePreview();toast(e.target.checked?'已开启减少误拦截':'已关闭减少误拦截，将按原提示词发送')};
-const isAdultJob=set=>[...W.garments,...(set||[])].some(g=>g.kind=='lib'&&A.ITEMS[g.k]&&A.ITEMS[g.k].a);
+const isAdultJob=(set,garments=W.garments)=>[...garments,...(set||[])].some(g=>g.kind=='lib'&&A.ITEMS[g.k]&&A.ITEMS[g.k].a);
 function neutralize(p,lang){if(lang=='ja')return FRAME.ja+'\n'+p;let t=p;for(const [a,b] of NEUTRAL)t=t.replace(a,b?'\x01'+b+'\x01':'\x02');
  t=t.replace(/\b(with|and|in)\s+\x02\s+(?:and|with)\b/gi,'$1').replace(/\x01\x02*\x01/g,'、').replace(/\x01\s+\x01/g,' ').replace(/[\x01]/g,'').replace(/\s*\x02\s*/g,' ')
   .replace(/(^|[，,、；;：:。.\n])\s*(?:and|with|,)?\s*(?=[，,、；;。.\n]|$)/g,'$1').replace(/([，、；])[，、；]+/g,'$1').replace(/([,;])\s*[,;]+/g,'$1').replace(/[ \t]{2,}/g,' ').replace(/\s+([,.;，。；、])/g,'$1').replace(/^[，,、]\s*|[，,、]\s*$/gm,'').replace(/[,，、]\s*([.。;；])/g,'$1');
@@ -873,24 +889,24 @@ async function confirmHistorySpace(planned){
  limitDialog.showModal();
  return new Promise(resolve=>limitDialog.addEventListener('close',()=>resolve(limitDialog.returnValue==='generate'),{once:true}));
 }
-async function runComfy(opts){
+async function runComfy(opts,input){
  // トレイ上では結果や検証エラーをトレイに返し、作業台では従来の表示を使います。
  const fail=message=>opts.quick?{got:[],errs:[imageError(message)]}:toast(message);
- if(!hasPerson())return fail('请先上传人物照片');
- if(!W.garments.length)return fail('请先选择服装');
- if(W.persons.length!=1||W.garments.length!=1)return fail(COMFY_LIMIT);
- if(!canPickPose()&&W.poses.length)return fail(COMFY_POSE);
- if(opts.quick&&W.exprs.length)return fail('ComfyUI 工作流不支持表情参考。');
+ if(!input.persons.length)return fail('请先上传人物照片');
+ if(!input.garments.length)return fail('请先选择服装');
+ if(input.persons.length!=1||input.garments.length!=1)return fail(COMFY_LIMIT);
+ if(!canPickPose()&&input.poses.length)return fail(COMFY_POSE);
+ if(opts.quick&&input.exprs.length)return fail('ComfyUI 工作流不支持表情参考。');
  if(!comfy.workflow){toast('请选择 ComfyUI 试穿工作流。');return cfgOpen()}
- const ac=new AbortController(),before=W.persons[0].blob,reference=W.garments[0];
+ const ac=new AbortController(),before=input.persons[0].blob,reference=input.garments[0];
  const {base,workflow,mapping,name}=comfy;
  const count=mapping.seed?(opts.n||outputCount()):1,ratio=opts.ar||$('#wbAR').value;
  const aspect=mapping.aspect&&ratio!='auto'?ratio:undefined;
- const language=opts.quick?quickLanguage:W.pl;
- const edited=opts.prompt??(W.dirty?$('#wbPrompt').value.trim():'');
+ const language=opts.quick?input.lang:W.pl;
+ const edited=opts.prompt??(opts.quick?input.prompt:W.dirty?$('#wbPrompt').value.trim():'');
  const output=[],errors=[];
  // 画像の取得を待つ前に各ジョブのプロンプトと角度を確定し、シート出力は使いません。
- const sets=poseSets().map(set=>({
+ const sets=poseSets(input.poses).map(set=>({
   pose:set[0]&&{...set[0]},
   prompt:mapping.prompt?edited||compose(set):undefined
  }));
@@ -960,23 +976,25 @@ async function runComfy(opts){
 }
 async function run(opts={}){
  if(W.busy)return {got:[],errs:[imageError('生成中…')]};
- if(isComfy())return runComfy(opts);
+ const input=opts.quick?traySelection:W;
+ if(!input)return {got:[],errs:[imageError('先从图库里选几项加入组合')]};
+ if(isComfy())return runComfy(opts,input);
  if(!cfg.key){toast('请先配置你的 API');cfgOpen();return {got:[],errs:[],nokey:true}}
  if(!opts.quick){const need=missingReference();if(need)return toast(need)}
- const mode=opts.quick&&!hasPerson()?'gen':W.mode;
+ const mode=input.mode;
  // 開始時の設定と画角を全画像で共有し、履歴にも同じモデルを記録します。
  const runSettings=cfg,aspectRatio=opts.ar||$('#wbAR').value;
  const ac=new AbortController();W.busy=ac;
  // 非同期の画像読み込みが始まる前に、表示中の送信言語と本文を画像ごとに確定します。
- const n=opts.n||+$('#wbN').value||1,jobs=[],pl=opts.quick?quickLanguage:W.pl,edited=opts.prompt??(W.dirty?$('#wbPrompt').value.trim():'');
- for(const set of poseSets()){
-  const prompt0=edited||compose(set,pl),soft=neutralOn()&&!isAdultJob(set);
+ const n=opts.n||+$('#wbN').value||1,jobs=[],pl=opts.quick?input.lang:W.pl,edited=opts.prompt??(opts.quick?input.prompt:W.dirty?$('#wbPrompt').value.trim():'');
+ for(const set of poseSets(input.poses)){
+  const prompt0=edited||compose(set,pl),soft=neutralOn()&&!isAdultJob(set,input.garments);
   const prompt=soft?neutralize(prompt0,pl):prompt0;
   for(let i=0;i<n;i++)jobs.push({set,prompt0,soft,prompt});
  }
  if(!await confirmHistorySpace(jobs.length)){W.busy=null;busy(false);return {got:[],errs:[]}}
  done=0;total=jobs.length;busy(true);stage('正在准备素材…');const errs=[],warns=new Set(),got=[];
- try{const pb=W.persons.map(p=>p.blob),gb=await Promise.all(W.garments.map(g=>assetBlob(g,ac.signal))),eb=await Promise.all(W.exprs.map(e=>assetBlob(e,ac.signal))),cache=new Map();const poseB=async p=>{const key=p.k+':'+p.ai;if(!cache.has(key))cache.set(key,assetBlob(p,ac.signal));return cache.get(key)};
+ try{const pb=input.persons.map(p=>p.blob),gb=await Promise.all(input.garments.map(g=>assetBlob(g,ac.signal))),eb=await Promise.all(input.exprs.map(e=>assetBlob(e,ac.signal))),cache=new Map();const poseB=async p=>{const key=p.k+':'+p.ai;if(!cache.has(key))cache.set(key,assetBlob(p,ac.signal));return cache.get(key)};
   stage(total>1?'模型正在绘制… 共 {count} 张':'模型正在绘制…',{count:total});
   let q=0;const worker=async()=>{while(q<jobs.length&&!ac.signal.aborted){const {set,prompt0,soft,prompt}=jobs[q++];try{const imgs=[...pb,...gb,...await Promise.all(set.map(poseB)),...eb];W.lastSent=prompt;
     const jc=new AbortController(),onA=()=>jc.abort();ac.signal.addEventListener('abort',onA);let tmo=false;const tm=setTimeout(()=>{tmo=true;jc.abort()},window.__TMO||180000);let r;try{r=await genOnce(imgs,prompt,jc.signal,runSettings,aspectRatio)}catch(x){x.sent=prompt;if(tmo&&!ac.signal.aborted){const y=Error('timeout');y.ui=()=>t('等了 3 分钟还没有返回。服务商可能正忙，稍后点「重试」。');throw y}throw x}finally{clearTimeout(tm);ac.signal.removeEventListener('abort',onA)}if(r.warn)warns.add(r.warn);const rec={t:Date.now()+Math.random(),prov:runSettings.prov,model:modelOf(runSettings),prompt,promptLanguage:pl,orig:soft?prompt0:null,neutral:soft,mode,label:set.map(p=>poseDesc(p,'zh').split('（')[0]).join(' / ')||'',poseNames:set.map(p=>A.ITEMS[p.k]).filter(Boolean).map(it=>({zh:it.zh,en:it.titleEn,ja:it.titleJa})),before:pb[0]||null,after:r.blob};got.push(rec);if(!await save(rec))warns.add('无法保存试穿记录，请下载结果图片。');W.results=got.slice();if(!opts.quick)show(got.length-1)}
@@ -1290,7 +1308,7 @@ function init(){
  })();
  return initialization;
 }
-let selectionRevision=0,quickLanguage=W.pl;
+let selectionRevision=0,traySelection;
 async function setSel(sel,lang=W.pl){
  const revision=++selectionRevision;
  await init();
@@ -1309,8 +1327,14 @@ async function setSel(sel,lang=W.pl){
  W.exprs=(sel.expr||[]).slice(0,1).map(fromLibrary);
  W.persons=person?[person]:[];
  W.dirty=false;render();
- quickLanguage=lang;
- return compose(undefined,lang);
+ // 選択の同期後も作業台は編集できます。トレイから送る素材・角度・本文はこの時点で固定します。
+ const prompt=compose(undefined,lang);
+ traySelection={
+  persons:W.persons.slice(),garments:W.garments.map(g=>({...g})),
+  poses:W.poses.map(p=>({...p})),exprs:W.exprs.map(e=>({...e})),
+  mode:hasPerson()?W.mode:'gen',lang,prompt
+ };
+ return prompt;
 }
 // 履歴から戻すのは今回の入力だけです。接続やワークフロー、追加指示の設定は保ちます。
 async function restoreHistory(record){
@@ -1341,7 +1365,7 @@ window.WB={async show(){await init();render()},async pick(it){await init();if(it
  // 履歴ページと作業台が、同じ IndexedDB の記録を読み書きします。
  restoreHistory,resultLabel,db:{tx,save,hist:()=>tx('readonly',s=>s.getAll()),del:key=>tx('readwrite',s=>s.delete(key)),clear:()=>tx('readwrite',s=>s.clear()),put:r=>tx('readwrite',s=>s.put(r)),refreshHist:hist},
  quick:opts=>run({...opts,quick:true}),cfgOpen,nice,busy:()=>!!W.busy,stop:()=>W.busy?.abort(),
- isConfigured:()=>isComfy()?!!comfy.workflow:!!cfg.key,provLabel:()=>[provider(cfg.prov),isComfy()?cfg.name:modelOf()].filter(Boolean).join(' · '),setSel};
+ isConfigured:()=>isComfy()?!!comfy.workflow:!!cfg.key,provLabel:()=>[provider(cfg.prov),isComfy()?cfg.name:modelOf()].filter(Boolean).join(' · '),setSel,openPicker:picker};
 // 言語変更で更新するのは表示だけです。入力、生成、履歴の再読み込みは行いません。
 addEventListener('uilocalechange',()=>{
  if(inited)render(true);
